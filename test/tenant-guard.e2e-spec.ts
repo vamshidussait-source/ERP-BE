@@ -26,7 +26,7 @@ interface ErrorResponse {
   message: string;
 }
 
-describe('TenantGuard (e2e)', () => {
+describe('Tenants routes are platform-admin-only (e2e)', () => {
   const TENANT_A_SCHEMA = 'guardtenanta';
   const TENANT_A_SUBDOMAIN = 'guardtenanta';
   const TENANT_B_SCHEMA = 'guardtenantb';
@@ -85,8 +85,8 @@ describe('TenantGuard (e2e)', () => {
     expect(adminLogin.accessToken).toBeDefined();
     platformAdminToken = adminLogin.accessToken;
 
-    // 2. Provision two tenants so we can prove cross-tenant rejection: a
-    //    token scoped to tenant A must be rejected when requesting tenant B.
+    // 2. Provision two tenants. A platform admin browses ALL tenants, so we
+    //    need more than one to prove the list is not tenant-filtered.
     const tenantARes = await request(app.getHttpServer())
       .post('/api/admin/tenants/provision')
       .set('Authorization', `Bearer ${platformAdminToken}`)
@@ -114,7 +114,8 @@ describe('TenantGuard (e2e)', () => {
     expect(tenantBId).toBeDefined();
 
     // 3. Seed a login user in tenant A's schema and log in to get a
-    //    tenant-scoped JWT (its payload carries tenantId = tenantAId).
+    //    tenant-scoped JWT (its payload carries tenantId = tenantAId). Such a
+    //    token must NOT be able to call the /api/tenants routes anymore.
     const passwordHash = await bcrypt.hash(SEED_PASSWORD, 10);
     await dataSource.query(
       `INSERT INTO "${TENANT_A_SCHEMA}".users (email, "passwordHash", role, "isActive")
@@ -165,14 +166,12 @@ describe('TenantGuard (e2e)', () => {
     }
   }
 
-  it('allows a platform admin token to list tenants', async () => {
-    // Platform admin JWTs carry no tenantId claim, and TenantGuard skips the
-    // tenant-matching check entirely for role === 'platform_admin'. The
-    // X-Tenant-ID header here points at tenant B — the token isn't scoped to
-    // any tenant, so it must not be rejected.
+  it('allows a platform admin token to list all tenants (no X-Tenant-ID)', async () => {
+    // Platform admin JWTs carry no tenantId claim and the tenants routes are
+    // NOT tenant-scoped: no TenantMiddleware, no X-Tenant-ID header. The list
+    // spans every tenant on the platform.
     const res = await request(app.getHttpServer())
       .get('/api/tenants')
-      .set('X-Tenant-ID', TENANT_B_SCHEMA)
       .set('Authorization', `Bearer ${platformAdminToken}`)
       .expect(200);
 
@@ -181,42 +180,39 @@ describe('TenantGuard (e2e)', () => {
     expect(body.total).toBeGreaterThanOrEqual(2);
   });
 
-  it("allows a platform admin token to read another tenant's detail", async () => {
-    // Cross-tenant access: the platform admin token (no tenant claims) can
-    // read tenant B even though the request resolves the tenant context to A.
+  it('allows a platform admin token to read any single tenant (no X-Tenant-ID)', async () => {
+    // Platform admins are not scoped to a "current tenant", so a single
+    // tenant's settings can be read directly by id.
     const res = await request(app.getHttpServer())
       .get(`/api/tenants/${tenantBId}`)
-      .set('X-Tenant-ID', TENANT_A_SCHEMA)
       .set('Authorization', `Bearer ${platformAdminToken}`)
       .expect(200);
 
     expect((res.body as TenantResponse).id).toBe(tenantBId);
   });
 
-  it('rejects a tenant-scoped user token for a different tenant', async () => {
-    // tenantAToken's JWT carries tenantId = tenantAId. Requesting tenant B's
-    // context must be rejected by TenantGuard with 403 (original behavior).
+  it('rejects a tenant-scoped user token from listing tenants (403)', async () => {
+    // A school user has no business listing every school on the platform.
+    // PlatformAdminGuard rejects any JWT whose role is not 'platform_admin'
+    // with 403 — regardless of any tenant claims in the token.
     const res = await request(app.getHttpServer())
       .get('/api/tenants')
-      .set('X-Tenant-ID', TENANT_B_SCHEMA)
       .set('Authorization', `Bearer ${tenantAToken}`)
       .expect(403);
 
     const body = res.body as ErrorResponse;
-    expect(body.message).toContain('tenant');
+    expect(body.message).toContain('platform admin');
   });
 
-  it('still allows a tenant-scoped user token for its own tenant', async () => {
-    // Sanity check: the original TenantGuard behavior for matching tenants is
-    // unchanged.
+  it('rejects a tenant-scoped user token from reading a tenant (403)', async () => {
+    // Same rule for single-tenant reads: tenant management is a
+    // platform-admin-only operation.
     const res = await request(app.getHttpServer())
-      .get('/api/tenants')
-      .set('X-Tenant-ID', TENANT_A_SCHEMA)
+      .get(`/api/tenants/${tenantAId}`)
       .set('Authorization', `Bearer ${tenantAToken}`)
-      .expect(200);
+      .expect(403);
 
-    const body = res.body as { data: unknown[]; total: number };
-    expect(Array.isArray(body.data)).toBe(true);
-    expect(body.total).toBeGreaterThanOrEqual(2);
+    const body = res.body as ErrorResponse;
+    expect(body.message).toContain('platform admin');
   });
 });

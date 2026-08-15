@@ -32,10 +32,12 @@ describe('Notifications (e2e)', () => {
   const TENANT_SUBDOMAIN = 'e2enotifications';
   const SEED_EMAIL = 'notifications-admin@example.com';
   const SEED_PASSWORD = 'E2ePassw0rd!';
+  const PLATFORM_ADMIN_EMAIL = 'notifications-e2e-platform@example.com';
 
   let app: INestApplication<App>;
   let dataSource: DataSource;
   let accessToken: string;
+  let platformAdminToken: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -60,9 +62,32 @@ describe('Notifications (e2e)', () => {
     // Remove any leftovers from a previous (possibly interrupted) run.
     await dropTenant();
 
-    // 1. Provision a fresh tenant through the public admin endpoint.
+    // 1. Seed a platform admin (clean slate for a known password) and log in.
+    //    Provisioning is restricted to platform admins, so the provision call
+    //    below must carry a platform-admin JWT from /api/admin/auth/login.
+    await dataSource.query(
+      `DELETE FROM public.platform_admins WHERE email = $1`,
+      [PLATFORM_ADMIN_EMAIL],
+    );
+    const adminPasswordHash = await bcrypt.hash(SEED_PASSWORD, 10);
+    await dataSource.query(
+      `INSERT INTO public.platform_admins (email, "passwordHash", name)
+       VALUES ($1, $2, $3)`,
+      [PLATFORM_ADMIN_EMAIL, adminPasswordHash, 'E2E Platform Admin'],
+    );
+
+    const adminLoginRes = await request(app.getHttpServer())
+      .post('/api/admin/auth/login')
+      .send({ email: PLATFORM_ADMIN_EMAIL, password: SEED_PASSWORD })
+      .expect(200);
+    const adminLogin = adminLoginRes.body as { accessToken: string };
+    expect(adminLogin.accessToken).toBeDefined();
+    platformAdminToken = adminLogin.accessToken;
+
+    // 2. Provision a fresh tenant through the admin endpoint.
     const provisionRes = await request(app.getHttpServer())
       .post('/api/admin/tenants/provision')
+      .set('Authorization', `Bearer ${platformAdminToken}`)
       .send({
         name: 'E2E Notifications Test School',
         schemaName: TENANT_SCHEMA,
@@ -72,7 +97,7 @@ describe('Notifications (e2e)', () => {
     const tenant = provisionRes.body as TenantResponse;
     expect(tenant.schemaName).toBe(TENANT_SCHEMA);
 
-    // 2. Seed a login user directly in the tenant schema (known bcrypt hash).
+    // 3. Seed a login user directly in the tenant schema (known bcrypt hash).
     const passwordHash = await bcrypt.hash(SEED_PASSWORD, 10);
     await dataSource.query(
       `INSERT INTO "${TENANT_SCHEMA}".users
@@ -81,7 +106,7 @@ describe('Notifications (e2e)', () => {
       [SEED_EMAIL, passwordHash, 'school_admin'],
     );
 
-    // 3. Log in and keep the JWT for the notification test requests.
+    // 4. Log in and keep the JWT for the notification test requests.
     const loginRes = await request(app.getHttpServer())
       .post('/api/auth/login')
       .set('X-Tenant-ID', TENANT_SCHEMA)
@@ -98,6 +123,12 @@ describe('Notifications (e2e)', () => {
 
   afterAll(async () => {
     await dropTenant();
+    if (dataSource) {
+      await dataSource.query(
+        `DELETE FROM public.platform_admins WHERE email = $1`,
+        [PLATFORM_ADMIN_EMAIL],
+      );
+    }
     if (app) {
       await app.close();
     }

@@ -10,7 +10,6 @@ import {
   Post,
   Query,
   UseGuards,
-  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -19,26 +18,40 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { TenantGuard } from '../auth/tenant.guard';
+import { PlatformAdminGuard } from '../platform-admin/platform-admin.guard';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { Tenant } from './tenant.entity';
-import { TenantConnectionCleanupInterceptor } from './tenant-connection-cleanup.interceptor';
 import { TenantsService } from './tenants.service';
 
+/**
+ * System-level tenant management for the admin portal.
+ *
+ * These routes are NOT tenant-scoped: a platform admin browses ALL tenants,
+ * so there is no single "current tenant" to resolve. TenantMiddleware is not
+ * applied here and no X-Tenant-ID header is used — access is restricted to
+ * platform-admin JWTs from POST /admin/auth/login (JwtAuthGuard +
+ * PlatformAdminGuard).
+ *
+ * Queries go straight through TenantsService's plain TypeORM repository on
+ * the public schema, so no per-request tenant connection is ever opened and
+ * TenantConnectionCleanupInterceptor is not needed on this controller.
+ */
 @ApiTags('tenants')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, TenantGuard)
-@UseInterceptors(TenantConnectionCleanupInterceptor)
+@UseGuards(JwtAuthGuard, PlatformAdminGuard)
 @Controller('tenants')
 export class TenantsController {
   constructor(private readonly tenantsService: TenantsService) {}
 
   @Get()
   @ApiOperation({
-    summary: 'List tenants (paginated)',
+    summary: 'List all tenants (paginated)',
     description:
-      'Returns a paginated list of tenants. Tenant-scoped: requires a valid ' +
-      'JWT whose tenant matches the X-Tenant-ID header (or subdomain).',
+      'PLATFORM-ADMIN-ONLY route — NOT tenant-scoped: requires a Bearer ' +
+      'token from POST /admin/auth/login whose payload role is ' +
+      "'platform_admin' (JwtAuthGuard + PlatformAdminGuard). No X-Tenant-ID " +
+      'header is used. Returns a paginated list of every tenant on the ' +
+      'platform as { data, total, page, limit }.',
   })
   @ApiResponse({
     status: 200,
@@ -50,7 +63,8 @@ export class TenantsController {
   })
   @ApiResponse({
     status: 403,
-    description: 'Forbidden — token tenant does not match request tenant',
+    description:
+      "Forbidden — platform admin privileges required (valid JWT with role 'platform_admin')",
   })
   findAll(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
@@ -62,7 +76,11 @@ export class TenantsController {
   @Get(':id')
   @ApiOperation({
     summary: 'Get a tenant by id',
-    description: 'Returns a single tenant by UUID.',
+    description:
+      'PLATFORM-ADMIN-ONLY route — NOT tenant-scoped: requires a Bearer ' +
+      "token from POST /admin/auth/login whose payload role is " +
+      "'platform_admin' (JwtAuthGuard + PlatformAdminGuard). No X-Tenant-ID " +
+      'header is used. Returns a single tenant by UUID.',
   })
   @ApiResponse({ status: 200, description: 'Tenant found', type: Tenant })
   @ApiResponse({
@@ -71,7 +89,8 @@ export class TenantsController {
   })
   @ApiResponse({
     status: 403,
-    description: 'Forbidden — token tenant does not match request tenant',
+    description:
+      "Forbidden — platform admin privileges required (valid JWT with role 'platform_admin')",
   })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   findOne(@Param('id') id: string) {
@@ -81,7 +100,11 @@ export class TenantsController {
   @Patch(':id')
   @ApiOperation({
     summary: 'Update a tenant',
-    description: 'Updates one or more fields of an existing tenant.',
+    description:
+      'PLATFORM-ADMIN-ONLY route — NOT tenant-scoped: requires a Bearer ' +
+      "token from POST /admin/auth/login whose payload role is " +
+      "'platform_admin' (JwtAuthGuard + PlatformAdminGuard). No X-Tenant-ID " +
+      'header is used. Updates one or more fields of an existing tenant.',
   })
   @ApiResponse({ status: 200, description: 'Tenant updated', type: Tenant })
   @ApiResponse({ status: 400, description: 'Validation failed' })
@@ -91,7 +114,8 @@ export class TenantsController {
   })
   @ApiResponse({
     status: 403,
-    description: 'Forbidden — token tenant does not match request tenant',
+    description:
+      "Forbidden — platform admin privileges required (valid JWT with role 'platform_admin')",
   })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   update(@Param('id') id: string, @Body() updateTenantDto: UpdateTenantDto) {
@@ -101,7 +125,11 @@ export class TenantsController {
   @Patch(':id/deactivate')
   @ApiOperation({
     summary: 'Deactivate a tenant',
-    description: 'Soft-deactivates a tenant by setting isActive to false.',
+    description:
+      'PLATFORM-ADMIN-ONLY route — NOT tenant-scoped: requires a Bearer ' +
+      "token from POST /admin/auth/login whose payload role is " +
+      "'platform_admin' (JwtAuthGuard + PlatformAdminGuard). No X-Tenant-ID " +
+      'header is used. Soft-deactivates a tenant by setting isActive to false.',
   })
   @ApiResponse({
     status: 200,
@@ -114,7 +142,8 @@ export class TenantsController {
   })
   @ApiResponse({
     status: 403,
-    description: 'Forbidden — token tenant does not match request tenant',
+    description:
+      "Forbidden — platform admin privileges required (valid JWT with role 'platform_admin')",
   })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   deactivate(@Param('id') id: string) {
@@ -126,7 +155,11 @@ export class TenantsController {
   @ApiOperation({
     summary: 'Reactivate a tenant',
     description:
-      'Reactivates a previously deactivated tenant by setting isActive to true.',
+      'PLATFORM-ADMIN-ONLY route — NOT tenant-scoped: requires a Bearer ' +
+      "token from POST /admin/auth/login whose payload role is " +
+      "'platform_admin' (JwtAuthGuard + PlatformAdminGuard). No X-Tenant-ID " +
+      'header is used. Reactivates a previously deactivated tenant by ' +
+      'setting isActive to true.',
   })
   @ApiResponse({
     status: 200,
@@ -139,7 +172,8 @@ export class TenantsController {
   })
   @ApiResponse({
     status: 403,
-    description: 'Forbidden — token tenant does not match request tenant',
+    description:
+      "Forbidden — platform admin privileges required (valid JWT with role 'platform_admin')",
   })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   reactivate(@Param('id') id: string) {

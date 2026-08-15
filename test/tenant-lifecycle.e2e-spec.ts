@@ -281,10 +281,16 @@ describe('Tenant lifecycle (e2e)', () => {
   });
 
   it('deactivates then reactivates the tenant via the reactivate endpoint', async () => {
+    // Tenant management routes are platform-admin-only (not tenant-scoped), so
+    // they use the platform admin JWT with no X-Tenant-ID header.
+    const adminAuth = {
+      Authorization: `Bearer ${platformAdminToken}`,
+    };
+
     // 1. Deactivate the tenant.
     const deactivatedRes = await request(app.getHttpServer())
       .patch(`/api/tenants/${tenantId}/deactivate`)
-      .set(auth())
+      .set(adminAuth)
       .expect(200);
     expect(deactivatedRes.body.id).toBe(tenantId);
     expect(deactivatedRes.body.isActive).toBe(false);
@@ -292,7 +298,7 @@ describe('Tenant lifecycle (e2e)', () => {
     // 2. Reactivate it via the new endpoint.
     const reactivatedRes = await request(app.getHttpServer())
       .post(`/api/tenants/${tenantId}/reactivate`)
-      .set(auth())
+      .set(adminAuth)
       .expect(200);
     expect(reactivatedRes.body.id).toBe(tenantId);
     expect(reactivatedRes.body.isActive).toBe(true);
@@ -300,7 +306,7 @@ describe('Tenant lifecycle (e2e)', () => {
     // 3. Confirm the change persisted.
     const fetchedRes = await request(app.getHttpServer())
       .get(`/api/tenants/${tenantId}`)
-      .set(auth())
+      .set(adminAuth)
       .expect(200);
     expect(fetchedRes.body.isActive).toBe(true);
   });
