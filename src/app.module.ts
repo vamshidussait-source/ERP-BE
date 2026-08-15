@@ -15,6 +15,7 @@ import { HealthModule } from './features/health/health.module';
 import { StaffModule } from './features/staff/staff.module';
 import { StudentsModule } from './features/students/students.module';
 import { TenantsModule } from './features/tenants/tenants.module';
+import { FeaturesModule } from './features/features/features.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { AppLogger } from './common/logger/app.logger';
 
@@ -42,6 +43,7 @@ import { AppLogger } from './common/logger/app.logger';
     }),
     HealthModule,
     TenantsModule,
+    FeaturesModule,
     StudentsModule,
     ClassesModule,
     StaffModule,
