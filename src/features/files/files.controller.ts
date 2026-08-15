@@ -22,7 +22,10 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TenantGuard } from '../auth/tenant.guard';
 import { TenantConnectionCleanupInterceptor } from '../tenants/tenant-connection-cleanup.interceptor';
-import type { TenantRequest } from '../tenants/tenant-request.types';
+import {
+  tenantSchemaOf,
+  type TenantRequest,
+} from '../tenants/tenant-request.types';
 import { FileUpload } from './file-upload.entity';
 import {
   ALLOWED_MIME_TYPES,
@@ -102,7 +105,7 @@ export class FilesController {
       file.originalname,
       file.mimetype,
       req.user?.sub,
-      req.tenantSchema ?? req.user?.tenantSchema ?? '',
+      req.tenantSchema ?? tenantSchemaOf(req.user) ?? '',
     );
   }
 
@@ -127,7 +130,7 @@ export class FilesController {
   getDownloadUrl(@Param('id') id: string, @Req() req: TenantRequest) {
     return this.filesService.getSignedDownloadUrl(
       id,
-      req.tenantSchema ?? req.user?.tenantSchema ?? '',
+      req.tenantSchema ?? tenantSchemaOf(req.user) ?? '',
     );
   }
 
@@ -151,7 +154,7 @@ export class FilesController {
   remove(@Param('id') id: string, @Req() req: TenantRequest) {
     return this.filesService.deleteFile(
       id,
-      req.tenantSchema ?? req.user?.tenantSchema ?? '',
+      req.tenantSchema ?? tenantSchemaOf(req.user) ?? '',
     );
   }
 }

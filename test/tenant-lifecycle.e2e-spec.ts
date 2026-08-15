@@ -46,11 +46,13 @@ describe('Tenant lifecycle (e2e)', () => {
   const TENANT_SUBDOMAIN = 'e2etest';
   const SEED_EMAIL = 'e2e-admin@example.com';
   const SEED_PASSWORD = 'E2ePassw0rd!';
+  const PLATFORM_ADMIN_EMAIL = 'platform-admin@example.com';
 
   let app: INestApplication<App>;
   let dataSource: DataSource;
   let tenantId: string;
   let accessToken: string;
+  let platformAdminToken: string;
   let classId: string;
   let sectionId: string;
   let studentId: string;
@@ -78,9 +80,32 @@ describe('Tenant lifecycle (e2e)', () => {
     // Remove any leftovers from a previous (possibly interrupted) run.
     await dropTenant();
 
-    // 1. Provision a fresh tenant through the public admin endpoint.
+    // 1. Seed a platform admin (clean slate for a known password) and log in.
+    //    Provisioning is restricted to platform admins, so the provision call
+    //    below must carry a platform-admin JWT from /api/admin/auth/login.
+    await dataSource.query(
+      `DELETE FROM public.platform_admins WHERE email = $1`,
+      [PLATFORM_ADMIN_EMAIL],
+    );
+    const adminPasswordHash = await bcrypt.hash(SEED_PASSWORD, 10);
+    await dataSource.query(
+      `INSERT INTO public.platform_admins (email, "passwordHash", name)
+       VALUES ($1, $2, $3)`,
+      [PLATFORM_ADMIN_EMAIL, adminPasswordHash, 'E2E Platform Admin'],
+    );
+
+    const adminLoginRes = await request(app.getHttpServer())
+      .post('/api/admin/auth/login')
+      .send({ email: PLATFORM_ADMIN_EMAIL, password: SEED_PASSWORD })
+      .expect(200);
+    const adminLogin = adminLoginRes.body as { accessToken: string };
+    expect(adminLogin.accessToken).toBeDefined();
+    platformAdminToken = adminLogin.accessToken;
+
+    // 2. Provision a fresh tenant through the admin endpoint.
     const provisionRes = await request(app.getHttpServer())
       .post('/api/admin/tenants/provision')
+      .set('Authorization', `Bearer ${platformAdminToken}`)
       .send({
         name: 'E2E Test School',
         schemaName: TENANT_SCHEMA,
@@ -92,7 +117,7 @@ describe('Tenant lifecycle (e2e)', () => {
     tenantId = tenant.id;
     expect(tenantId).toBeDefined();
 
-    // 2. Seed a login user directly in the tenant schema (known bcrypt hash).
+    // 3. Seed a login user directly in the tenant schema (known bcrypt hash).
     const passwordHash = await bcrypt.hash(SEED_PASSWORD, 10);
     await dataSource.query(
       `INSERT INTO "${TENANT_SCHEMA}".users (email, "passwordHash", role, "isActive")
@@ -100,7 +125,7 @@ describe('Tenant lifecycle (e2e)', () => {
       [SEED_EMAIL, passwordHash, 'school_admin'],
     );
 
-    // 3. Log in and keep the JWT for the tenant-scoped requests.
+    // 4. Log in and keep the JWT for the tenant-scoped requests.
     const loginRes = await request(app.getHttpServer())
       .post('/api/auth/login')
       .set('X-Tenant-ID', TENANT_SCHEMA)
@@ -117,6 +142,12 @@ describe('Tenant lifecycle (e2e)', () => {
 
   afterAll(async () => {
     await dropTenant();
+    if (dataSource) {
+      await dataSource.query(
+        `DELETE FROM public.platform_admins WHERE email = $1`,
+        [PLATFORM_ADMIN_EMAIL],
+      );
+    }
     if (app) {
       await app.close();
     }
@@ -149,6 +180,27 @@ describe('Tenant lifecycle (e2e)', () => {
       Authorization: `Bearer ${accessToken}`,
     };
   }
+
+  it('rejects provisioning without platform admin privileges', async () => {
+    const body = {
+      name: 'Should Fail',
+      schemaName: 'shouldfail',
+      subdomain: 'shouldfail',
+    };
+
+    // No token at all -> JwtAuthGuard rejects with 401.
+    await request(app.getHttpServer())
+      .post('/api/admin/tenants/provision')
+      .send(body)
+      .expect(401);
+
+    // A regular tenant-scoped user JWT is not a platform admin -> 403.
+    await request(app.getHttpServer())
+      .post('/api/admin/tenants/provision')
+      .set(auth())
+      .send(body)
+      .expect(403);
+  });
 
   it('creates a class', async () => {
     const res = await request(app.getHttpServer())

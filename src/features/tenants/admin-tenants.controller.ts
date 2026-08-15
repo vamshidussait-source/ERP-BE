@@ -1,5 +1,7 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PlatformAdminGuard } from '../platform-admin/platform-admin.guard';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { Tenant } from './tenant.entity';
 import { TenantProvisioningService } from './tenant-provisioning.service';
@@ -12,15 +14,16 @@ export class AdminTenantsController {
   ) {}
 
   @Post('provision')
+  @UseGuards(JwtAuthGuard, PlatformAdminGuard)
   @ApiOperation({
     summary: 'Provision a new tenant',
     description:
       'Creates a tenant, provisions its Postgres schema, and runs all ' +
       'tenant-schema migrations.\n\n' +
-      '⚠️ Admin route — NOT tenant-scoped: this endpoint is not protected by ' +
-      'JwtAuthGuard/TenantGuard and requires no X-Tenant-ID header or Bearer ' +
-      'token. It is intended for system administrators only (an admin-only ' +
-      'guard is planned as a follow-up).',
+      '⚠️ SYSTEM-LEVEL route — NOT tenant-scoped: requires a Bearer token ' +
+      'from POST /admin/auth/login whose payload role is ' +
+      "'platform_admin' (JwtAuthGuard + PlatformAdminGuard). No X-Tenant-ID " +
+      'header is used.',
   })
   @ApiResponse({
     status: 201,
@@ -29,11 +32,16 @@ export class AdminTenantsController {
   })
   @ApiResponse({ status: 400, description: 'Validation failed' })
   @ApiResponse({
+    status: 403,
+    description:
+      'Forbidden — platform admin privileges required (valid JWT with role ' +
+      "'platform_admin')",
+  })
+  @ApiResponse({
     status: 409,
     description: 'Conflict — schemaName or subdomain already exists',
   })
   provision(@Body() createTenantDto: CreateTenantDto) {
-    // TODO: protect this endpoint with an admin-only guard in a later step.
     return this.tenantProvisioningService.provisionTenant(createTenantDto);
   }
 }
