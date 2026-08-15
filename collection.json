@@ -1,0 +1,2396 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api": {
+      "get": {
+        "operationId": "AppController_getHello",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["App"]
+      }
+    },
+    "/api/health": {
+      "get": {
+        "description": "Public route — no authentication required. Returns the service health status.",
+        "operationId": "HealthController_getHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Service is healthy"
+          }
+        },
+        "summary": "Health check",
+        "tags": ["health"]
+      }
+    },
+    "/api/health/validate": {
+      "post": {
+        "description": "Public route — no authentication required. Echoes back the validated payload to demonstrate request validation.",
+        "operationId": "HealthController_validate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateHealthCheckDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Validation succeeded, returns the validated payload"
+          },
+          "400": {
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Validate a payload",
+        "tags": ["health"]
+      }
+    },
+    "/api/tenants": {
+      "get": {
+        "description": "Returns a paginated list of tenants. Tenant-scoped: requires a valid JWT whose tenant matches the X-Tenant-ID header (or subdomain).",
+        "operationId": "TenantsController_findAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list returned as { data, total, page, limit }"
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "403": {
+            "description": "Forbidden — token tenant does not match request tenant"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List tenants (paginated)",
+        "tags": ["tenants"]
+      }
+    },
+    "/api/tenants/{id}": {
+      "get": {
+        "description": "Returns a single tenant by UUID.",
+        "operationId": "TenantsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tenant"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "403": {
+            "description": "Forbidden — token tenant does not match request tenant"
+          },
+          "404": {
+            "description": "Tenant not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a tenant by id",
+        "tags": ["tenants"]
+      },
+      "patch": {
+        "description": "Updates one or more fields of an existing tenant.",
+        "operationId": "TenantsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tenant updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tenant"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "403": {
+            "description": "Forbidden — token tenant does not match request tenant"
+          },
+          "404": {
+            "description": "Tenant not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a tenant",
+        "tags": ["tenants"]
+      }
+    },
+    "/api/tenants/{id}/deactivate": {
+      "patch": {
+        "description": "Soft-deactivates a tenant by setting isActive to false.",
+        "operationId": "TenantsController_deactivate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant deactivated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tenant"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "403": {
+            "description": "Forbidden — token tenant does not match request tenant"
+          },
+          "404": {
+            "description": "Tenant not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Deactivate a tenant",
+        "tags": ["tenants"]
+      }
+    },
+    "/api/admin/tenants/provision": {
+      "post": {
+        "description": "Creates a tenant, provisions its Postgres schema, and runs all tenant-schema migrations.\n\n⚠️ Admin route — NOT tenant-scoped: this endpoint is not protected by JwtAuthGuard/TenantGuard and requires no X-Tenant-ID header or Bearer token. It is intended for system administrators only (an admin-only guard is planned as a follow-up).",
+        "operationId": "AdminTenantsController_provision",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTenantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tenant created and schema provisioned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tenant"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "409": {
+            "description": "Conflict — schemaName or subdomain already exists"
+          }
+        },
+        "summary": "Provision a new tenant",
+        "tags": ["admin-tenants"]
+      }
+    },
+    "/api/students": {
+      "post": {
+        "description": "Creates a new student in the current tenant schema. The admission number must be unique within the tenant.",
+        "operationId": "StudentsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStudentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Student created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Student"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed (missing or invalid fields)"
+          },
+          "401": {
+            "description": "Unauthorized — valid JWT required"
+          },
+          "404": {
+            "description": "Not found — referenced section does not exist"
+          },
+          "409": {
+            "description": "Conflict — admission number already exists"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a student",
+        "tags": ["students"]
+      },
+      "get": {
+        "description": "Returns a paginated list of students in the current tenant schema, optionally filtered by status.",
+        "operationId": "StudentsController_findAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list returned as { data, total, page, limit }"
+          },
+          "400": {
+            "description": "Validation failed (invalid page, limit, or status)"
+          },
+          "401": {
+            "description": "Unauthorized — valid JWT required"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List students (paginated)",
+        "tags": ["students"]
+      }
+    },
+    "/api/students/{id}": {
+      "get": {
+        "description": "Returns a single student from the current tenant schema by UUID.",
+        "operationId": "StudentsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Student found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Student"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — valid JWT required"
+          },
+          "404": {
+            "description": "Student not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a student by id",
+        "tags": ["students"]
+      },
+      "patch": {
+        "description": "Updates one or more fields of an existing student in the current tenant schema.",
+        "operationId": "StudentsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStudentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Student updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Student"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "401": {
+            "description": "Unauthorized — valid JWT required"
+          },
+          "404": {
+            "description": "Student not found"
+          },
+          "409": {
+            "description": "Conflict — admission number already exists"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a student",
+        "tags": ["students"]
+      },
+      "delete": {
+        "description": "Soft deletes a student by setting their status to \"inactive\". The row is kept in the database.",
+        "operationId": "StudentsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Student soft-deleted (status set to inactive)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Student"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — valid JWT required"
+          },
+          "404": {
+            "description": "Student not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Soft delete a student",
+        "tags": ["students"]
+      }
+    },
+    "/api/classes": {
+      "post": {
+        "description": "Creates a new class in the current tenant schema. The class name must be unique within the tenant.",
+        "operationId": "ClassesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClassDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Class created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchoolClass"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "409": {
+            "description": "Conflict — class name already exists"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a class",
+        "tags": ["classes"]
+      },
+      "get": {
+        "description": "Returns all classes in the current tenant schema, ordered by displayOrder (then name).",
+        "operationId": "ClassesController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of classes ordered by displayOrder",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SchoolClass"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List classes",
+        "tags": ["classes"]
+      }
+    },
+    "/api/classes/{id}": {
+      "get": {
+        "description": "Returns a single class by UUID.",
+        "operationId": "ClassesController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Class found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchoolClass"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "404": {
+            "description": "Class not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a class by id",
+        "tags": ["classes"]
+      },
+      "patch": {
+        "description": "Updates one or more fields of an existing class.",
+        "operationId": "ClassesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClassDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Class updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchoolClass"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "404": {
+            "description": "Class not found"
+          },
+          "409": {
+            "description": "Conflict — class name already exists"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a class",
+        "tags": ["classes"]
+      },
+      "delete": {
+        "description": "Permanently deletes a class. Fails with 409 if the class still has sections — delete or reassign its sections first.",
+        "operationId": "ClassesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Class deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchoolClass"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "404": {
+            "description": "Class not found"
+          },
+          "409": {
+            "description": "Conflict — class still has sections"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a class (hard delete)",
+        "tags": ["classes"]
+      }
+    },
+    "/api/classes/{classId}/sections": {
+      "post": {
+        "description": "Creates a new section under the given class. The section name must be unique within that class (e.g. \"Grade 8 - A\" only once).",
+        "operationId": "ClassSectionsController_create",
+        "parameters": [
+          {
+            "name": "classId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Section created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Section"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "404": {
+            "description": "Class not found"
+          },
+          "409": {
+            "description": "Conflict — section name already exists in this class"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a section within a class",
+        "tags": ["sections"]
+      },
+      "get": {
+        "description": "Returns all sections belonging to the given class, ordered by name.",
+        "operationId": "ClassSectionsController_findAll",
+        "parameters": [
+          {
+            "name": "classId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of sections for the class",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Section"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "404": {
+            "description": "Class not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List sections of a class",
+        "tags": ["sections"]
+      }
+    },
+    "/api/sections/{id}": {
+      "get": {
+        "description": "Returns a single section by UUID (direct lookup).",
+        "operationId": "SectionsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Section found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Section"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "404": {
+            "description": "Section not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a section by id",
+        "tags": ["sections"]
+      },
+      "patch": {
+        "description": "Updates one or more fields of an existing section.",
+        "operationId": "SectionsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Section updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Section"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "404": {
+            "description": "Section not found"
+          },
+          "409": {
+            "description": "Conflict — section name already exists in this class"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a section",
+        "tags": ["sections"]
+      },
+      "delete": {
+        "description": "Permanently deletes a section. Fails with 409 if students are still assigned to it — unassign them first.",
+        "operationId": "SectionsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Section deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Section"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "404": {
+            "description": "Section not found"
+          },
+          "409": {
+            "description": "Conflict — section still has students assigned"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a section (hard delete)",
+        "tags": ["sections"]
+      }
+    },
+    "/api/staff": {
+      "post": {
+        "description": "Creates a new staff member in the current tenant schema.\n\n🔒 Requires the school_admin role. Read-only roles (staff, parent, student) are denied with 403.",
+        "operationId": "StaffController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStaffDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Staff member created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Staff"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "403": {
+            "description": "Forbidden — requires the school_admin role"
+          },
+          "409": {
+            "description": "Conflict — email or employeeId already exists"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a staff member",
+        "tags": ["staff"]
+      },
+      "get": {
+        "description": "Returns a paginated list of staff members in the current tenant schema. Accessible to any authenticated tenant role.",
+        "operationId": "StaffController_findAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list returned as { data, total, page, limit }"
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List staff members (paginated)",
+        "tags": ["staff"]
+      }
+    },
+    "/api/staff/{id}": {
+      "get": {
+        "description": "Returns a single staff member by UUID. Accessible to any authenticated tenant role.",
+        "operationId": "StaffController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Staff member found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Staff"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "404": {
+            "description": "Staff member not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a staff member by id",
+        "tags": ["staff"]
+      },
+      "patch": {
+        "description": "Updates one or more fields of an existing staff member.\n\n🔒 Requires the school_admin role.",
+        "operationId": "StaffController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStaffDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Staff member updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Staff"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "403": {
+            "description": "Forbidden — requires the school_admin role"
+          },
+          "404": {
+            "description": "Staff member not found"
+          },
+          "409": {
+            "description": "Conflict — email or employeeId already exists"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a staff member",
+        "tags": ["staff"]
+      },
+      "delete": {
+        "description": "Soft deletes a staff member by setting their status to \"inactive\". The row is kept in the database.\n\n🔒 Requires the school_admin role.",
+        "operationId": "StaffController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Staff member soft-deleted (status set to inactive)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Staff"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "403": {
+            "description": "Forbidden — requires the school_admin role"
+          },
+          "404": {
+            "description": "Staff member not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Soft delete a staff member",
+        "tags": ["staff"]
+      }
+    },
+    "/api/attendance/mark": {
+      "post": {
+        "description": "Creates an attendance record for a student on a date, or updates the existing record if one already exists (teachers often correct same-day mistakes). The record is stored under the student’s current section (denormalized) and notes from an earlier mark are preserved when not provided.\n\n🔒 Requires the school_admin or staff role — parents and students cannot mark attendance.",
+        "operationId": "AttendanceController_mark",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkAttendanceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Attendance record created or updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Attendance"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "403": {
+            "description": "Forbidden — requires the school_admin or staff role"
+          },
+          "404": {
+            "description": "Not found — student does not exist"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mark attendance for a student on a date",
+        "tags": ["attendance"]
+      }
+    },
+    "/api/attendance/section/{sectionId}/date/{date}": {
+      "get": {
+        "description": "Returns every attendance record for the given section on the given date, enriched with each student’s first and last name. Open to any authenticated tenant role.",
+        "operationId": "AttendanceController_findByDate",
+        "parameters": [
+          {
+            "name": "sectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "date",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attendance records for the section and date"
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "404": {
+            "description": "Not found — section does not exist"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get all attendance for a section on a date",
+        "tags": ["attendance"]
+      }
+    },
+    "/api/attendance/student/{studentId}": {
+      "get": {
+        "description": "Returns a paginated attendance history for one student, optionally filtered to a date range. Open to any authenticated tenant role (parents and students can view relevant attendance).",
+        "operationId": "AttendanceController_findByStudent",
+        "parameters": [
+          {
+            "name": "studentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number (1-based)",
+            "schema": {
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Items per page",
+            "schema": {
+              "default": 10,
+              "example": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "startDate",
+            "required": false,
+            "in": "query",
+            "description": "Only records on or after this date (inclusive)",
+            "schema": {
+              "example": "2026-01-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "endDate",
+            "required": false,
+            "in": "query",
+            "description": "Only records on or before this date (inclusive)",
+            "schema": {
+              "example": "2026-12-31",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated history as { data, total, page, limit }"
+          },
+          "400": {
+            "description": "Validation failed (invalid page, limit, or date range)"
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a student’s attendance history",
+        "tags": ["attendance"]
+      }
+    },
+    "/api/attendance/section/{sectionId}/summary": {
+      "get": {
+        "description": "Returns per-student counts of present/absent/late/excused for the given section over a date range. Students in the section with no records appear with zero counts — useful for reports. Open to any authenticated tenant role.",
+        "operationId": "AttendanceController_getSummary",
+        "parameters": [
+          {
+            "name": "sectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startDate",
+            "required": true,
+            "in": "query",
+            "description": "Start date (inclusive)",
+            "schema": {
+              "example": "2026-01-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "endDate",
+            "required": true,
+            "in": "query",
+            "description": "End date (inclusive)",
+            "schema": {
+              "example": "2026-12-31",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Per-student status counts"
+          },
+          "400": {
+            "description": "Validation failed (missing or invalid date range)"
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "404": {
+            "description": "Not found — section does not exist"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get an attendance summary for a section",
+        "tags": ["attendance"]
+      }
+    },
+    "/api/files/upload": {
+      "post": {
+        "description": "Uploads a file and records its metadata in the tenant schema.\n\n📎 Allowed types: application/pdf, image/jpeg, image/png, image/webp.\n📦 Maximum size: 10485760 bytes (10 MB) — enforced both at the interceptor level and in the service.\n\nIn mock mode (FILES_MOCK_MODE=true), the R2 upload is skipped and only the metadata row is created.",
+        "operationId": "FilesController_upload",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "description": "The file to upload (multipart/form-data field \"file\").\n\nAllowed MIME types: application/pdf, image/jpeg, image/png, image/webp. Maximum size: 10485760 bytes (10 MB).",
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "File uploaded successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileUpload"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed — file too large (>10 MB) or disallowed MIME type"
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "413": {
+            "description": "Payload too large — exceeded the interceptor file size limit"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upload a file to Cloudflare R2",
+        "tags": ["files"]
+      }
+    },
+    "/api/files/{id}/download-url": {
+      "get": {
+        "description": "Looks up the file record and returns a presigned URL valid for 15 minutes. The URL is generated on demand rather than being permanently public. The response does not redirect or stream the file itself.",
+        "operationId": "FilesController_getDownloadUrl",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Presigned download URL (expires in 15 minutes) with file metadata"
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "404": {
+            "description": "File not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a time-limited presigned download URL",
+        "tags": ["files"]
+      }
+    },
+    "/api/files/{id}": {
+      "delete": {
+        "description": "Removes both the Cloudflare R2 object and the metadata row. In mock mode, only the metadata row is removed.",
+        "operationId": "FilesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileUpload"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          },
+          "404": {
+            "description": "File not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a file",
+        "tags": ["files"]
+      }
+    },
+    "/api/notifications/test": {
+      "post": {
+        "description": "Internal-only test endpoint. NOT tenant-scoped: it lives in the public/application scope because notification credentials are application-level, not per-school — so no X-Tenant-ID header or TenantGuard is required. A valid JWT is still required (JwtAuthGuard) so the endpoint is not fully public.\n\nCurrently in mock mode: nothing is actually sent. The service logs what would be sent and returns a mock success response, letting us verify the wiring end-to-end before real provider credentials exist.",
+        "operationId": "NotificationsController_test",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendTestNotificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Mock notification acknowledged (nothing actually sent)"
+          },
+          "400": {
+            "description": "Validation failed (invalid type)"
+          },
+          "401": {
+            "description": "Unauthorized — valid Bearer token required"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Send a test notification (mock)",
+        "tags": ["notifications"]
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "description": "Public route — NOT protected by JwtAuthGuard or TenantGuard; no Bearer token required.\n\nNote: TenantMiddleware still resolves the tenant context from the X-Tenant-ID header (or subdomain) so login is scoped to a specific tenant. Returns a JWT access token to use as the Bearer token on protected endpoints.",
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login succeeded, returns { accessToken }"
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "401": {
+            "description": "Unauthorized — invalid credentials or inactive account"
+          }
+        },
+        "summary": "Log in and receive a JWT",
+        "tags": ["auth"]
+      }
+    }
+  },
+  "info": {
+    "title": "School ERP API",
+    "description": "Multi-tenant school ERP backend. Tenant context is resolved from the X-Tenant-ID header (or the Host subdomain). Most routes are protected by JWT + TenantGuard (Bearer token); exceptions are noted on each endpoint.",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "CreateHealthCheckDto": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Message to validate",
+            "example": "Hello ERP",
+            "minLength": 3
+          }
+        },
+        "required": ["message"]
+      },
+      "Tenant": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique tenant identifier (UUID)",
+            "example": "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+          },
+          "name": {
+            "type": "string",
+            "description": "School name",
+            "example": "Greenwood High School"
+          },
+          "schemaName": {
+            "type": "string",
+            "description": "Postgres schema name for the tenant",
+            "example": "greenwood"
+          },
+          "subdomain": {
+            "type": "string",
+            "description": "Subdomain used to resolve the tenant from the Host header",
+            "example": "greenwood"
+          },
+          "planTier": {
+            "type": "string",
+            "description": "Plan tier",
+            "enum": ["trial", "basic", "premium"],
+            "example": "trial"
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether the tenant account is active",
+            "example": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the tenant was created"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the tenant was last updated"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "schemaName",
+          "subdomain",
+          "planTier",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "UpdateTenantDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "School name",
+            "example": "Greenwood High School",
+            "minLength": 2,
+            "maxLength": 255
+          },
+          "schemaName": {
+            "type": "string",
+            "description": "Postgres schema name for the tenant (lowercase letters, numbers, underscores, must start with a letter)",
+            "example": "greenwood",
+            "minLength": 2,
+            "maxLength": 255
+          },
+          "subdomain": {
+            "type": "string",
+            "description": "Subdomain used to resolve the tenant from the Host header",
+            "example": "greenwood",
+            "minLength": 2,
+            "maxLength": 255
+          },
+          "planTier": {
+            "type": "string",
+            "description": "Plan tier",
+            "enum": ["trial", "basic", "premium"],
+            "example": "basic"
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether the tenant account is active",
+            "example": true
+          }
+        }
+      },
+      "CreateTenantDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "School name",
+            "example": "Greenwood High School",
+            "minLength": 2,
+            "maxLength": 255
+          },
+          "schemaName": {
+            "type": "string",
+            "description": "Postgres schema name for the tenant (lowercase letters, numbers, underscores, must start with a letter)",
+            "example": "greenwood",
+            "minLength": 2,
+            "maxLength": 255
+          },
+          "subdomain": {
+            "type": "string",
+            "description": "Subdomain used to resolve the tenant from the Host header",
+            "example": "greenwood",
+            "minLength": 2,
+            "maxLength": 255
+          },
+          "planTier": {
+            "type": "string",
+            "description": "Plan tier",
+            "enum": ["trial", "basic", "premium"],
+            "example": "trial"
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether the tenant account is active",
+            "example": true
+          }
+        },
+        "required": ["name", "schemaName", "subdomain"]
+      },
+      "CreateStudentDto": {
+        "type": "object",
+        "properties": {
+          "firstName": {
+            "type": "string",
+            "description": "Student first name",
+            "example": "Grace",
+            "maxLength": 255
+          },
+          "lastName": {
+            "type": "string",
+            "description": "Student last name",
+            "example": "Hopper",
+            "maxLength": 255
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "description": "Student date of birth (ISO 8601 date string)",
+            "example": "2006-04-14"
+          },
+          "admissionNumber": {
+            "type": "string",
+            "description": "Unique admission number within the tenant schema",
+            "example": "ADM-2024-001",
+            "maxLength": 50
+          },
+          "sectionId": {
+            "type": "object",
+            "description": "Section the student belongs to (foreign key to sections.id)",
+            "example": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+            "nullable": true
+          }
+        },
+        "required": ["firstName", "lastName", "dateOfBirth", "admissionNumber"]
+      },
+      "Student": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique student identifier (UUID)",
+            "example": "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+          },
+          "firstName": {
+            "type": "string",
+            "description": "Student first name",
+            "example": "Grace"
+          },
+          "lastName": {
+            "type": "string",
+            "description": "Student last name",
+            "example": "Hopper"
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "description": "Student date of birth (ISO 8601 date)",
+            "example": "2006-04-14"
+          },
+          "admissionNumber": {
+            "type": "string",
+            "description": "Unique admission number within the tenant schema",
+            "example": "ADM-2024-001"
+          },
+          "sectionId": {
+            "type": "object",
+            "description": "Section the student belongs to (foreign key to sections.id)",
+            "example": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "description": "Current student status",
+            "enum": ["active", "inactive", "graduated"],
+            "example": "active"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the student was created"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the student was last updated"
+          }
+        },
+        "required": [
+          "id",
+          "firstName",
+          "lastName",
+          "dateOfBirth",
+          "admissionNumber",
+          "sectionId",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "UpdateStudentDto": {
+        "type": "object",
+        "properties": {
+          "firstName": {
+            "type": "string",
+            "description": "Student first name",
+            "example": "Grace",
+            "maxLength": 255
+          },
+          "lastName": {
+            "type": "string",
+            "description": "Student last name",
+            "example": "Hopper",
+            "maxLength": 255
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "description": "Student date of birth (ISO 8601 date string)",
+            "example": "2006-04-14"
+          },
+          "admissionNumber": {
+            "type": "string",
+            "description": "Unique admission number within the tenant schema",
+            "example": "ADM-2024-002",
+            "maxLength": 50
+          },
+          "sectionId": {
+            "type": "object",
+            "description": "Section the student belongs to (pass null to unassign)",
+            "example": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "description": "New student status",
+            "enum": ["active", "inactive", "graduated"],
+            "example": "active"
+          }
+        }
+      },
+      "CreateClassDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Class name, unique within the tenant schema",
+            "example": "Grade 8",
+            "maxLength": 255
+          },
+          "displayOrder": {
+            "type": "number",
+            "description": "Logical sort order (e.g. 1 for Grade 1, 2 for Grade 2)",
+            "example": 8
+          }
+        },
+        "required": ["name", "displayOrder"]
+      },
+      "SchoolClass": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique class identifier (UUID)",
+            "example": "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+          },
+          "name": {
+            "type": "string",
+            "description": "Class name, unique within the tenant schema",
+            "example": "Grade 8"
+          },
+          "displayOrder": {
+            "type": "number",
+            "description": "Logical sort order (e.g. 1 for Grade 1, 2 for Grade 2)",
+            "example": 8
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the class was created"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the class was last updated"
+          }
+        },
+        "required": ["id", "name", "displayOrder", "createdAt", "updatedAt"]
+      },
+      "UpdateClassDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Class name, unique within the tenant schema",
+            "example": "Grade 8",
+            "maxLength": 255
+          },
+          "displayOrder": {
+            "type": "number",
+            "description": "Logical sort order (e.g. 1 for Grade 1, 2 for Grade 2)",
+            "example": 8
+          }
+        }
+      },
+      "CreateSectionDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Section name, unique per class (e.g. \"Grade 8 - A\" only once)",
+            "example": "A",
+            "maxLength": 50
+          },
+          "capacity": {
+            "type": "number",
+            "description": "Maximum number of students (optional for now)",
+            "example": 30,
+            "nullable": true
+          }
+        },
+        "required": ["name"]
+      },
+      "Section": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique section identifier (UUID)",
+            "example": "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+          },
+          "classId": {
+            "type": "string",
+            "description": "Class the section belongs to (foreign key to classes.id)",
+            "example": "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+          },
+          "name": {
+            "type": "string",
+            "description": "Section name, unique per class (e.g. \"Grade 8 - A\" only once)",
+            "example": "A"
+          },
+          "capacity": {
+            "type": "object",
+            "description": "Maximum number of students (optional for now)",
+            "example": 30,
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the section was created"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the section was last updated"
+          }
+        },
+        "required": [
+          "id",
+          "classId",
+          "name",
+          "capacity",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "UpdateSectionDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Section name, unique per class (e.g. \"Grade 8 - A\" only once)",
+            "example": "A",
+            "maxLength": 50
+          },
+          "capacity": {
+            "type": "object",
+            "description": "Maximum number of students (pass null to clear)",
+            "example": 30,
+            "nullable": true
+          }
+        }
+      },
+      "CreateStaffDto": {
+        "type": "object",
+        "properties": {
+          "firstName": {
+            "type": "string",
+            "description": "Staff first name",
+            "example": "Ada",
+            "maxLength": 255
+          },
+          "lastName": {
+            "type": "string",
+            "description": "Staff last name",
+            "example": "Lovelace",
+            "maxLength": 255
+          },
+          "email": {
+            "type": "string",
+            "description": "Staff email, unique within the tenant schema",
+            "example": "ada@greenwood.edu"
+          },
+          "phone": {
+            "type": "string",
+            "description": "Contact phone number",
+            "example": "+1-555-0100",
+            "nullable": true,
+            "maxLength": 50
+          },
+          "designation": {
+            "type": "string",
+            "description": "Job designation",
+            "example": "Math Teacher",
+            "maxLength": 255
+          },
+          "employeeId": {
+            "type": "string",
+            "description": "Unique employee ID within the tenant schema",
+            "example": "EMP-0001",
+            "maxLength": 50
+          }
+        },
+        "required": [
+          "firstName",
+          "lastName",
+          "email",
+          "designation",
+          "employeeId"
+        ]
+      },
+      "Staff": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique staff identifier (UUID)",
+            "example": "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+          },
+          "firstName": {
+            "type": "string",
+            "description": "Staff first name",
+            "example": "Ada"
+          },
+          "lastName": {
+            "type": "string",
+            "description": "Staff last name",
+            "example": "Lovelace"
+          },
+          "email": {
+            "type": "string",
+            "description": "Staff email, unique within the tenant schema",
+            "example": "ada@greenwood.edu"
+          },
+          "phone": {
+            "type": "object",
+            "description": "Contact phone number",
+            "example": "+1-555-0100",
+            "nullable": true
+          },
+          "designation": {
+            "type": "string",
+            "description": "Job designation",
+            "example": "Math Teacher"
+          },
+          "employeeId": {
+            "type": "string",
+            "description": "Unique employee ID within the tenant schema",
+            "example": "EMP-0001"
+          },
+          "status": {
+            "type": "string",
+            "description": "Current staff status",
+            "enum": ["active", "inactive"],
+            "example": "active"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the staff member was created"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the staff member was last updated"
+          }
+        },
+        "required": [
+          "id",
+          "firstName",
+          "lastName",
+          "email",
+          "phone",
+          "designation",
+          "employeeId",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "UpdateStaffDto": {
+        "type": "object",
+        "properties": {
+          "firstName": {
+            "type": "string",
+            "description": "Staff first name",
+            "example": "Ada",
+            "maxLength": 255
+          },
+          "lastName": {
+            "type": "string",
+            "description": "Staff last name",
+            "example": "Lovelace",
+            "maxLength": 255
+          },
+          "email": {
+            "type": "string",
+            "description": "Staff email, unique within the tenant schema",
+            "example": "ada@greenwood.edu"
+          },
+          "phone": {
+            "type": "object",
+            "description": "Contact phone number (pass null to clear)",
+            "example": "+1-555-0100",
+            "nullable": true,
+            "maxLength": 50
+          },
+          "designation": {
+            "type": "string",
+            "description": "Job designation",
+            "example": "Math Teacher",
+            "maxLength": 255
+          },
+          "employeeId": {
+            "type": "string",
+            "description": "Unique employee ID within the tenant schema",
+            "example": "EMP-0001",
+            "maxLength": 50
+          },
+          "status": {
+            "type": "string",
+            "description": "New staff status",
+            "enum": ["active", "inactive"],
+            "example": "active"
+          }
+        }
+      },
+      "MarkAttendanceDto": {
+        "type": "object",
+        "properties": {
+          "studentId": {
+            "type": "string",
+            "description": "Student to mark (foreign key to students.id)",
+            "example": "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+          },
+          "date": {
+            "type": "string",
+            "description": "Attendance date (ISO 8601 date, YYYY-MM-DD)",
+            "example": "2026-08-01"
+          },
+          "status": {
+            "type": "string",
+            "description": "Attendance status",
+            "enum": ["present", "absent", "late", "excused"],
+            "example": "present"
+          },
+          "notes": {
+            "type": "object",
+            "description": "Optional note (e.g. reason for absence)",
+            "example": "Doctor appointment",
+            "nullable": true,
+            "maxLength": 500
+          }
+        },
+        "required": ["studentId", "date", "status"]
+      },
+      "Attendance": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique attendance record identifier (UUID)",
+            "example": "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+          },
+          "studentId": {
+            "type": "string",
+            "description": "Student this record belongs to (foreign key to students.id)",
+            "example": "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+          },
+          "sectionId": {
+            "type": "object",
+            "description": "Section at the time of marking (denormalized from students.sectionId, foreign key to sections.id)",
+            "example": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+            "nullable": true
+          },
+          "date": {
+            "type": "string",
+            "description": "Attendance date (ISO 8601 date, YYYY-MM-DD)",
+            "example": "2026-08-01"
+          },
+          "status": {
+            "type": "string",
+            "description": "Attendance status",
+            "enum": ["present", "absent", "late", "excused"],
+            "example": "present"
+          },
+          "markedBy": {
+            "type": "object",
+            "description": "Staff member who marked this record (foreign key to staff.id; null when marked by a school_admin who has no staff row)",
+            "example": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+            "nullable": true
+          },
+          "notes": {
+            "type": "object",
+            "description": "Optional note (e.g. reason for absence)",
+            "example": "Doctor appointment",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the record was created"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the record was last updated"
+          }
+        },
+        "required": [
+          "id",
+          "studentId",
+          "sectionId",
+          "date",
+          "status",
+          "markedBy",
+          "notes",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "FileUpload": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique file record identifier (UUID)",
+            "example": "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "Original filename as uploaded by the user",
+            "example": "report-card.pdf"
+          },
+          "storageKey": {
+            "type": "string",
+            "description": "Cloudflare R2 object key, namespaced per tenant schema ({tenantSchema}/{uuid}-{sanitizedFileName})",
+            "example": "e2etest/f47ac10b-58cc-4372-a567-0e02b2c3d479-report-card.pdf"
+          },
+          "mimeType": {
+            "type": "string",
+            "description": "MIME type of the file",
+            "example": "application/pdf"
+          },
+          "sizeBytes": {
+            "type": "number",
+            "description": "File size in bytes",
+            "example": 204800
+          },
+          "uploadedBy": {
+            "type": "object",
+            "description": "Tenant user who uploaded the file (foreign key to users.id; null if the user was deleted)",
+            "example": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+            "nullable": true
+          },
+          "relatedEntityType": {
+            "type": "object",
+            "description": "Kind of entity this file is attached to (e.g. student, fee_receipt) — for future linking",
+            "example": "student",
+            "nullable": true
+          },
+          "relatedEntityId": {
+            "type": "object",
+            "description": "Id of the related entity (used together with relatedEntityType)",
+            "example": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the file record was created"
+          }
+        },
+        "required": [
+          "id",
+          "fileName",
+          "storageKey",
+          "mimeType",
+          "sizeBytes",
+          "uploadedBy",
+          "relatedEntityType",
+          "relatedEntityId",
+          "createdAt"
+        ]
+      },
+      "SendTestNotificationDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Which notification channel to test",
+            "enum": ["sms", "email", "push"],
+            "example": "sms"
+          }
+        },
+        "required": ["type"]
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "User email address",
+            "example": "admin@greenwood.edu"
+          },
+          "password": {
+            "type": "string",
+            "description": "User password",
+            "example": "S3curePassw0rd!",
+            "minLength": 1
+          }
+        },
+        "required": ["email", "password"]
+      }
+    }
+  }
+}
