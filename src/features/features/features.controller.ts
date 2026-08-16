@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseEnumPipe,
   Patch,
   UseGuards,
 } from '@nestjs/common';
@@ -19,7 +20,9 @@ import { Feature } from './feature.entity';
 import { PlanTierFeature } from './plan-tier-feature.entity';
 import { TenantFeatureOverride } from './tenant-feature-override.entity';
 import { SetFeatureOverrideDto } from './dto/set-feature-override.dto';
+import { SetPlanTierDefaultDto } from './dto/set-plan-tier-default.dto';
 import { FeaturesService } from './features.service';
+import { TenantPlanTier } from '../tenants/tenant.entity';
 
 /**
  * Platform-level feature entitlement management for the admin portal.
@@ -141,6 +144,130 @@ export class FeaturesController {
       featureKey,
       dto.enabled,
     );
+  }
+
+  @Patch('plan-tiers/:planTier/features/:featureKey')
+  @ApiOperation({
+    summary: 'Set a plan tier feature default',
+    description:
+      'PLATFORM-ADMIN-ONLY route — NOT tenant-scoped: requires a Bearer ' +
+      "token from POST /admin/auth/login whose payload role is " +
+      "'platform_admin' (JwtAuthGuard + PlatformAdminGuard). No X-Tenant-ID " +
+      'header is used. Creates or updates a plan_tier_features row, changing ' +
+      'the default enabled state of this feature for the given tier. Body: ' +
+      '{ enabled: boolean }. WARNING: Changing a tier default takes effect ' +
+      'immediately for every tenant on this tier that does not have an ' +
+      'explicit override for this feature — this is not limited to newly ' +
+      'provisioned tenants.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Plan tier default created or updated',
+    type: PlanTierFeature,
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      "Validation failed — planTier must be one of 'trial' | 'basic' | 'premium' or body missing enabled",
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — valid Bearer token required',
+  })
+  @ApiResponse({
+    status: 403,
+    description:
+      "Forbidden — platform admin privileges required (valid JWT with role 'platform_admin')",
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Feature not found',
+  })
+  setPlanTierDefault(
+    @Param('planTier', new ParseEnumPipe(TenantPlanTier))
+    planTier: TenantPlanTier,
+    @Param('featureKey') featureKey: string,
+    @Body() dto: SetPlanTierDefaultDto,
+  ) {
+    return this.featuresService.setPlanTierDefault(
+      planTier,
+      featureKey,
+      dto.enabled,
+    );
+  }
+
+  // NOTE: the literal route /plan-tiers/features must be declared BEFORE the
+  // parameterized /plan-tiers/:planTier/features below — Express matches
+  // routes in registration order, so a literal 'features' segment would
+  // otherwise be captured by the :planTier param.
+  @Get('plan-tiers/features')
+  @ApiOperation({
+    summary: "Get all plan tiers' feature defaults",
+    description:
+      'PLATFORM-ADMIN-ONLY route — NOT tenant-scoped: requires a Bearer ' +
+      "token from POST /admin/auth/login whose payload role is " +
+      "'platform_admin' (JwtAuthGuard + PlatformAdminGuard). No X-Tenant-ID " +
+      'header is used. Returns the default feature set for every plan tier ' +
+      'in one response, grouped by tier as { trial: { featureKey: ' +
+      'boolean, ... }, basic: { ... }, premium: { ... } } — for rendering a ' +
+      'Trial/Basic/Premium comparison table in a single view.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Defaults for all three tiers as { trial: { featureKey: boolean }, ' +
+      'basic: { ... }, premium: { ... } }',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — valid Bearer token required',
+  })
+  @ApiResponse({
+    status: 403,
+    description:
+      "Forbidden — platform admin privileges required (valid JWT with role 'platform_admin')",
+  })
+  getAllPlanTierDefaults() {
+    return this.featuresService.getAllPlanTierDefaults();
+  }
+
+  @Get('plan-tiers/:planTier/features')
+  @ApiOperation({
+    summary: "Get a plan tier's feature defaults",
+    description:
+      'PLATFORM-ADMIN-ONLY route — NOT tenant-scoped: requires a Bearer ' +
+      "token from POST /admin/auth/login whose payload role is " +
+      "'platform_admin' (JwtAuthGuard + PlatformAdminGuard). No X-Tenant-ID " +
+      'header is used. Returns the default feature set (plan_tier_features ' +
+      'rows) for a single plan tier.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Tier defaults returned as an array of { planTier, featureKey, ' +
+      'enabled, ... } rows',
+    type: PlanTierFeature,
+    isArray: true,
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      "Validation failed — planTier must be one of 'trial' | 'basic' | 'premium'",
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — valid Bearer token required',
+  })
+  @ApiResponse({
+    status: 403,
+    description:
+      "Forbidden — platform admin privileges required (valid JWT with role 'platform_admin')",
+  })
+  listPlanTierDefaults(
+    @Param('planTier', new ParseEnumPipe(TenantPlanTier))
+    planTier: TenantPlanTier,
+  ) {
+    return this.featuresService.listPlanTierDefaults(planTier);
   }
 
   @Delete('tenants/:tenantId/features/:featureKey')

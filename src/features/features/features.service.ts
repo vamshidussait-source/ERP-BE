@@ -87,6 +87,37 @@ export class FeaturesService {
   }
 
   /**
+   * Creates or updates (upserts) a plan tier's default for a single feature.
+   *
+   * Applies immediately to every tenant on the tier that does not have an
+   * explicit TenantFeatureOverride for the feature — not just newly
+   * provisioned tenants (overrides always win over the tier default).
+   */
+  async setPlanTierDefault(
+    planTier: TenantPlanTier,
+    featureKey: string,
+    enabled: boolean,
+  ): Promise<PlanTierFeature> {
+    await this.assertFeatureExists(featureKey);
+
+    await this.planTierFeatureRepository.upsert(
+      { planTier, featureKey, enabled },
+      { conflictPaths: ['planTier', 'featureKey'] },
+    );
+
+    const tierDefault = await this.planTierFeatureRepository.findOne({
+      where: { planTier, featureKey },
+    });
+    if (!tierDefault) {
+      // Cannot happen after a successful upsert; guard for type-safety.
+      throw new NotFoundException(
+        `Tier default for ${planTier} feature ${featureKey} not found after upsert`,
+      );
+    }
+    return tierDefault;
+  }
+
+  /**
    * Deletes a tenant override, reverting that tenant back to their tier's
    * default for the feature. Idempotent: removing a non-existent override is
    * a no-op (returns removed: false) — the end state is the same.
@@ -116,6 +147,29 @@ export class FeaturesService {
       where: { planTier },
       order: { featureKey: 'ASC' },
     });
+  }
+
+  /**
+   * Returns the default feature set for every plan tier in one response:
+   * { trial: { featureKey: boolean, ... }, basic: {...}, premium: {...} }.
+   *
+   * Fetches all plan_tier_features rows in a single query and groups them by
+   * tier in memory — one round trip, no per-tier queries.
+   */
+  async getAllPlanTierDefaults(): Promise<
+    Record<TenantPlanTier, Record<string, boolean>>
+  > {
+    const rows = await this.planTierFeatureRepository.find();
+
+    const grouped: Record<TenantPlanTier, Record<string, boolean>> = {
+      [TenantPlanTier.Trial]: {},
+      [TenantPlanTier.Basic]: {},
+      [TenantPlanTier.Premium]: {},
+    };
+    for (const row of rows) {
+      grouped[row.planTier][row.featureKey] = row.enabled;
+    }
+    return grouped;
   }
 
   private async assertTenantExists(tenantId: string): Promise<void> {
