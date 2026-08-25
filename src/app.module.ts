@@ -1,3 +1,4 @@
+import './pg-date-parser'; // register pg date OID parser before any connection
 import { Module, ValidationPipe } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -16,6 +17,10 @@ import { StaffModule } from './features/staff/staff.module';
 import { StudentsModule } from './features/students/students.module';
 import { TenantsModule } from './features/tenants/tenants.module';
 import { FeaturesModule } from './features/features/features.module';
+import { ParentStudentLinksModule } from './features/parent-student-links/parent-student-links.module';
+import { TimetableModule } from './features/timetable/timetable.module';
+import { ProgressReportsModule } from './features/progress-reports/progress-reports.module';
+import { ExamsGradesModule } from './features/exams-grades/exams-grades.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { AppLogger } from './common/logger/app.logger';
 
@@ -39,6 +44,10 @@ import { AppLogger } from './common/logger/app.logger';
         autoLoadEntities: true,
         synchronize: false,
         logging: process.env.NODE_ENV !== 'production',
+        extra: {
+          max: 20,
+          connectionTimeoutMillis: 10000,
+        },
       }),
     }),
     HealthModule,
@@ -48,6 +57,10 @@ import { AppLogger } from './common/logger/app.logger';
     ClassesModule,
     StaffModule,
     AttendanceModule,
+    ParentStudentLinksModule,
+    TimetableModule,
+    ProgressReportsModule,
+    ExamsGradesModule,
     FilesModule,
     NotificationsModule,
     AuthModule,

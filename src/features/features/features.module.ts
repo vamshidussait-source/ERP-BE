@@ -5,6 +5,7 @@ import { PlatformAdminAuthModule } from '../platform-admin/platform-admin-auth.m
 import { Tenant } from '../tenants/tenant.entity';
 import { Feature } from './feature.entity';
 import { FeaturesController } from './features.controller';
+import { FeatureGuard } from './feature.guard';
 import { FeaturesService } from './features.service';
 import { PlanTierFeature } from './plan-tier-feature.entity';
 import { TenantFeatureOverride } from './tenant-feature-override.entity';
@@ -31,7 +32,7 @@ import { TenantFeatureOverride } from './tenant-feature-override.entity';
     PlatformAdminAuthModule,
   ],
   controllers: [FeaturesController],
-  providers: [FeaturesService],
-  exports: [FeaturesService],
+  providers: [FeaturesService, FeatureGuard],
+  exports: [FeaturesService, FeatureGuard],
 })
 export class FeaturesModule {}

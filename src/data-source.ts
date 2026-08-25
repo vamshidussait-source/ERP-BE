@@ -1,3 +1,4 @@
+import './pg-date-parser'; // register pg date OID parser before any connection
 import * as dotenv from 'dotenv';
 import { DataSource } from 'typeorm';
 
@@ -13,4 +14,8 @@ export const AppDataSource = new DataSource({
   entities: ['src/**/*.entity.ts'],
   migrations: ['src/migrations/public/**/*.ts'],
   synchronize: false,
+  extra: {
+    max: 20,
+    connectionTimeoutMillis: 10000,
+  },
 });

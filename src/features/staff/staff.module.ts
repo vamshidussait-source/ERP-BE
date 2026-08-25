@@ -15,6 +15,7 @@ import { StaffService } from './staff.service';
   ],
   controllers: [StaffController],
   providers: [StaffService],
+  exports: [StaffService],
 })
 export class StaffModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

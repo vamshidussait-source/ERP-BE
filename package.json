@@ -22,7 +22,9 @@
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/data-source.ts",
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/data-source.ts",
     "seed:admin": "ts-node -r tsconfig-paths/register src/scripts/seed-platform-admin.ts",
-    "seed:features": "ts-node -r tsconfig-paths/register src/scripts/seed-features.ts"
+    "seed:features": "ts-node -r tsconfig-paths/register src/scripts/seed-features.ts",
+    "seed:demo": "ts-node -r tsconfig-paths/register src/scripts/seed-demo-data.ts",
+    "seed:demo-logins": "ts-node -r tsconfig-paths/register src/scripts/seed-demo-logins.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1101.0",
@@ -50,6 +52,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
+    "@faker-js/faker": "^10.6.0",
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",

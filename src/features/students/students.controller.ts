@@ -3,6 +3,7 @@ import {
   Controller,
   DefaultValuePipe,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   ParseEnumPipe,
@@ -10,6 +11,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
@@ -20,8 +22,12 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Roles } from '../auth/roles.decorator';
+import { RolesGuard } from '../auth/roles.guard';
 import { TenantGuard } from '../auth/tenant.guard';
+import { UserRole } from '../auth/user.entity';
 import { TenantConnectionCleanupInterceptor } from '../tenants/tenant-connection-cleanup.interceptor';
+import type { TenantRequest } from '../tenants/tenant-request.types';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { Student, StudentStatus } from './student.entity';
@@ -29,7 +35,7 @@ import { StudentsService } from './students.service';
 
 @ApiTags('students')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, TenantGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 @UseInterceptors(TenantConnectionCleanupInterceptor)
 @Controller('students')
 export class StudentsController {
@@ -64,6 +70,47 @@ export class StudentsController {
   })
   create(@Body() createStudentDto: CreateStudentDto) {
     return this.studentsService.create(createStudentDto);
+  }
+
+  @Get('me')
+  @ApiOperation({
+    summary: 'Get own profile (student self-service)',
+    description:
+      'Convenience endpoint for student-role users to fetch their own ' +
+      'profile without needing to know or pass a studentId.\n\n' +
+      '🔒 Only available to users with the student role. The server ' +
+      'resolves the student record via the user\u2019s linkedStudentId. ' +
+      'If the account is not linked to a student record, returns 404.\n\n' +
+      'For school_admin or staff roles that need to look up a ' +
+      'specific student, use GET /students/:id instead.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Student profile for the authenticated user',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — valid Bearer token required',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — only available to student-role users',
+  })
+  @ApiResponse({
+    status: 404,
+    description:
+      'Not found — account is not linked to a student record',
+  })
+  async findMyProfile(@Req() req: TenantRequest) {
+    const user = req.user;
+
+    if (user?.role !== UserRole.Student) {
+      throw new ForbiddenException(
+        'This endpoint is only available to student accounts.',
+      );
+    }
+
+    return this.studentsService.getMyProfile(user.sub);
   }
 
   @Get()

@@ -146,6 +146,19 @@ export class StaffService {
     return rows[0];
   }
 
+  /**
+   * Returns the linkedStaffId for a given user, or null if the user
+   * account has no staff record linked.
+   */
+  async getLinkedStaffId(userId: string): Promise<string | null> {
+    const qr = await this.queryRunner();
+    const rows = (await qr.query(
+      `SELECT "linkedStaffId" FROM users WHERE id = $1`,
+      [userId],
+    )) as Array<{ linkedStaffId: string | null }>;
+    return rows[0]?.linkedStaffId ?? null;
+  }
+
   private isUniqueViolation(error: unknown): boolean {
     return (
       typeof error === 'object' &&

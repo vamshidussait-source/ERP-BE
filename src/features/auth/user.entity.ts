@@ -35,6 +35,12 @@ export class User {
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
+  @Column({ type: 'uuid', nullable: true })
+  linkedStudentId: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  linkedStaffId: string | null;
+
   @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt: Date;
 

@@ -1,6 +1,8 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SharedAuthModule } from '../auth/shared-auth.module';
+import { ParentStudentLinksModule } from '../parent-student-links/parent-student-links.module';
+import { StudentsModule } from '../students/students.module';
 import { Tenant } from '../tenants/tenant.entity';
 import { TenantMiddleware } from '../tenants/tenant.middleware';
 import { TenantsModule } from '../tenants/tenants.module';
@@ -11,6 +13,8 @@ import { AttendanceService } from './attendance.service';
   imports: [
     TenantsModule,
     SharedAuthModule,
+    ParentStudentLinksModule,
+    StudentsModule,
     TypeOrmModule.forFeature([Tenant]),
   ],
   controllers: [AttendanceController],

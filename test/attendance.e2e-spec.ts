@@ -84,6 +84,7 @@ describe('Attendance (e2e)', () => {
   let student1Id: string;
   let student2Id: string;
   let student3Id: string;
+  let parentUserId: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -163,6 +164,13 @@ describe('Attendance (e2e)', () => {
       ],
     );
 
+    // Look up the parent user id for later parent–student linking.
+    const parentRows = (await dataSource.query(
+      `SELECT id FROM "${TENANT_SCHEMA}".users WHERE email = $1`,
+      [PARENT_EMAIL],
+    )) as Array<{ id: string }>;
+    parentUserId = parentRows[0].id;
+
     // 4. Log in as all three users.
     adminToken = await login(ADMIN_EMAIL);
     staffToken = await login(STAFF_EMAIL);
@@ -231,6 +239,14 @@ describe('Attendance (e2e)', () => {
     expect(student1.sectionId).toBe(sectionId);
     expect(student2.sectionId).toBe(sectionId);
     expect(student3.sectionId).toBe(sectionId);
+
+    // 6. Link parent to student1 so the parent can view that student's
+    //    attendance (required by the new parent-child scoping).
+    await request(app.getHttpServer())
+      .post('/api/parent-links')
+      .set(auth(adminToken))
+      .send({ parentUserId, studentId: student1Id })
+      .expect(201);
   });
 
   afterAll(async () => {
@@ -291,16 +307,16 @@ describe('Attendance (e2e)', () => {
   }
 
   /**
-   * Normalizes a Postgres `date` value to YYYY-MM-DD. The pg driver returns
-   * date columns as JS Date objects (local midnight), which JSON-serialize in
-   * UTC — so compare via local date components, not the raw ISO string.
+   * Regex to assert that a value is a plain YYYY-MM-DD date string,
+   * NOT a full ISO datetime (e.g. "2026-08-01T00:00:00.000Z").
    */
-  function toYmd(value: string): string {
-    const d = new Date(value);
-    const month = `${d.getMonth() + 1}`.padStart(2, '0');
-    const day = `${d.getDate()}`.padStart(2, '0');
-    return `${d.getFullYear()}-${month}-${day}`;
-  }
+  const YYYY_MM_DD = /^\d{4}-\d{2}-\d{2}$/;
+
+  /**
+   * Regex that matches a full ISO datetime string — used to verify the
+   * date field is NOT serialized as a datetime.
+   */
+  const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T/;
 
   it('lets a staff user mark attendance (201, status present)', async () => {
     const res = await request(app.getHttpServer())
@@ -315,7 +331,11 @@ describe('Attendance (e2e)', () => {
 
     const body = res.body as AttendanceResponse;
     expect(body.studentId).toBe(student1Id);
-    expect(toYmd(body.date)).toBe(MARK_DATE);
+    // REGRESSION: date must be a plain "YYYY-MM-DD" string, not an
+    // ISO datetime like "2026-08-03T00:00:00.000Z".
+    expect(body.date).toBe(MARK_DATE);
+    expect(body.date).toMatch(YYYY_MM_DD);
+    expect(body.date).not.toMatch(ISO_DATETIME);
     expect(body.status).toBe('present');
     expect(body.id).toBeDefined();
     // The seeded "staff" user has no row in the staff table, so the FK-safe
@@ -424,6 +444,52 @@ describe('Attendance (e2e)', () => {
     expect(row3.excused).toBe(0);
   });
 
+  it('returns date as plain YYYY-MM-DD, not ISO datetime (regression)', async () => {
+    // 1. POST /attendance/mark — the create/upsert endpoint.
+    const markRes = await request(app.getHttpServer())
+      .post('/api/attendance/mark')
+      .set(auth(staffToken))
+      .send({
+        studentId: student1Id,
+        date: MARK_DATE,
+        status: 'present',
+      })
+      .expect(201);
+
+    const markBody = markRes.body as AttendanceResponse;
+    expect(markBody.date).toBe(MARK_DATE);
+    expect(markBody.date).toMatch(YYYY_MM_DD);
+    expect(markBody.date).not.toMatch(ISO_DATETIME);
+
+    // 2. GET /attendance/section/:sectionId/date/:date — date columns
+    //    in the section-by-date query.
+    const sectionRes = await request(app.getHttpServer())
+      .get(`/api/attendance/section/${sectionId}/date/${MARK_DATE}`)
+      .set(auth(staffToken))
+      .expect(200);
+
+    const sectionRecords = sectionRes.body as AttendanceResponse[];
+    for (const record of sectionRecords) {
+      expect(record.date).toMatch(YYYY_MM_DD);
+      expect(record.date).not.toMatch(ISO_DATETIME);
+    }
+
+    // 3. GET /attendance/student/:studentId — paginated student history.
+    const studentRes = await request(app.getHttpServer())
+      .get(`/api/attendance/student/${student1Id}`)
+      .query({ startDate: '2026-08-01', endDate: '2026-08-31' })
+      .set(auth(staffToken))
+      .expect(200);
+
+    const studentBody = studentRes.body as {
+      data: AttendanceResponse[];
+    };
+    for (const record of studentBody.data) {
+      expect(record.date).toMatch(YYYY_MM_DD);
+      expect(record.date).not.toMatch(ISO_DATETIME);
+    }
+  });
+
   it('rejects a parent marking attendance (403) but allows GET endpoints', async () => {
     // 403 on the write endpoint.
     const markRes = await request(app.getHttpServer())
@@ -438,17 +504,26 @@ describe('Attendance (e2e)', () => {
     const markBody = markRes.body as ErrorResponse;
     expect(markBody.message).toContain('school_admin');
 
-    // GET endpoints stay open to the parent role.
+    // GET endpoints stay open to the parent role (for linked children
+    //    and section-level queries).
     await request(app.getHttpServer())
       .get(`/api/attendance/section/${sectionId}/date/${MARK_DATE}`)
       .set(auth(parentToken))
       .expect(200);
 
+    // Parent is linked to student1, so this should work.
     await request(app.getHttpServer())
       .get(`/api/attendance/student/${student1Id}`)
       .query({ startDate: '2026-08-01', endDate: '2026-08-31' })
       .set(auth(parentToken))
       .expect(200);
+
+    // Parent is NOT linked to student2, so this should be 403.
+    await request(app.getHttpServer())
+      .get(`/api/attendance/student/${student2Id}`)
+      .query({ startDate: '2026-08-01', endDate: '2026-08-31' })
+      .set(auth(parentToken))
+      .expect(403);
 
     await request(app.getHttpServer())
       .get(`/api/attendance/section/${sectionId}/summary`)

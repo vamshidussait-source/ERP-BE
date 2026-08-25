@@ -9,6 +9,21 @@ import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { Student, StudentStatus } from './student.entity';
 
+/** Student profile returned by the self-service endpoint. */
+export interface StudentProfile {
+  id: string;
+  firstName: string;
+  lastName: string;
+  admissionNumber: string;
+  sectionId: string | null;
+  sectionName: string | null;
+  className: string | null;
+  status: StudentStatus;
+  dateOfBirth: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 @Injectable()
 export class StudentsService {
   constructor(
@@ -162,12 +177,69 @@ export class StudentsService {
       throw new NotFoundException(`Student with id ${id} not found`);
     }
     return rows[0];
+  }  /**
+   * Returns the linkedStudentId for a given user, or null if the user
+   * account has no student record linked.
+   */
+  async getLinkedStudentId(userId: string): Promise<string | null> {
+    const qr = await this.queryRunner();
+    const rows = (await qr.query(
+      `SELECT "linkedStudentId" FROM users WHERE id = $1`,
+      [userId],
+    )) as Array<{ linkedStudentId: string | null }>;
+    return rows[0]?.linkedStudentId ?? null;
+  }
+
+  /**
+   * Resolves the authenticated user's linkedStudentId and returns the
+   * student profile enriched with section/class names.
+   */
+  async getMyProfile(userId: string): Promise<StudentProfile> {
+    const linkedStudentId = await this.getLinkedStudentId(userId);
+
+    if (!linkedStudentId) {
+      throw new NotFoundException(
+        'Your account is not linked to a student record — contact your school administrator.',
+      );
+    }
+
+    const qr = await this.queryRunner();
+    const rows = (await qr.query(
+      `SELECT
+         s.*, sec.name AS "sectionName",
+         c.name AS "className"
+       FROM students s
+       LEFT JOIN sections sec ON sec.id = s."sectionId"
+       LEFT JOIN classes c ON c.id = sec."classId"
+       WHERE s.id = $1`,
+      [linkedStudentId],
+    )) as Array<Record<string, unknown>>;
+
+    if (!rows[0]) {
+      throw new NotFoundException(
+        `Student with id ${linkedStudentId} not found`,
+      );
+    }
+
+    const row = rows[0];
+    return {
+      id: row.id as string,
+      firstName: row.firstName as string,
+      lastName: row.lastName as string,
+      admissionNumber: row.admissionNumber as string,
+      sectionId: (row.sectionId as string) ?? null,
+      sectionName: (row.sectionName as string) ?? null,
+      className: (row.className as string) ?? null,
+      status: row.status as StudentStatus,
+      dateOfBirth: row.dateOfBirth as string,
+      createdAt: row.createdAt as Date,
+      updatedAt: row.updatedAt as Date,
+    };
   }
 
   private isUniqueViolation(error: unknown): boolean {
     return (
-      typeof error === 'object' &&
-      error !== null &&
+      typeof error === 'object' && error !== null &&
       (error as { code?: string }).code === '23505'
     );
   }

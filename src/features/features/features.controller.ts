@@ -2,10 +2,12 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   ParseEnumPipe,
   Patch,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -16,6 +18,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PlatformAdminGuard } from '../platform-admin/platform-admin.guard';
+import type { TenantRequest } from '../tenants/tenant-request.types';
 import { Feature } from './feature.entity';
 import { PlanTierFeature } from './plan-tier-feature.entity';
 import { TenantFeatureOverride } from './tenant-feature-override.entity';
@@ -25,30 +28,69 @@ import { FeaturesService } from './features.service';
 import { TenantPlanTier } from '../tenants/tenant.entity';
 
 /**
- * Platform-level feature entitlement management for the admin portal.
+ * Feature entitlement management.
  *
- * These routes are NOT tenant-scoped: features and tenant entitlements are
- * system-level data in the public schema, managed only by platform admins
- * (JwtAuthGuard + PlatformAdminGuard). No X-Tenant-ID header is used, and no
- * TenantMiddleware applies — the same access model as TenantsController.
+ * Platform-admin routes (most of this controller) manage the feature catalog
+ * and per-tenant/tier overrides. The GET /features/me route is tenant-scoped
+ * and available to any authenticated tenant role.
  *
- * The tenant routes are deliberately nested under /tenants/:tenantId/features
- * (rather than /features/:tenantId) because they are tenant-centric reads and
- * writes; the controller declares full paths to keep them exactly where the
- * admin portal expects them.
+ * PlatformAdminGuard is applied at the method level (not class level) so that
+ * the /features/me endpoint can use TenantGuard instead without being blocked
+ * by the platform admin check.
  */
 @ApiTags('features')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PlatformAdminGuard)
 @Controller()
 export class FeaturesController {
   constructor(private readonly featuresService: FeaturesService) {}
 
+  // ── Tenant-scoped: any authenticated tenant role ────────────────────
+
+  @Get('features/me')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: "Get own tenant's effective features",
+    description:
+      "Returns the effective feature map for the authenticated user's " +
+      'tenant. Any authenticated tenant role (school_admin, staff, parent, ' +
+      'student) can call this. The School Portal frontend uses this to ' +
+      'determine which nav items and routes to show.\n\n' +
+      'Requires a valid tenant-scoped JWT (JwtAuthGuard + TenantGuard). ' +
+      'Platform admins (whose JWT has no tenantId) are NOT expected to use ' +
+      'this endpoint -- use GET /tenants/:tenantId/features instead.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Effective features returned as { featureKey: boolean, ... }',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized -- valid Bearer token required',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden -- token does not match the requested tenant',
+  })
+  async getMyFeatures(@Req() req: TenantRequest) {
+    const user = req.user;
+    const tenantId = user && 'tenantId' in user ? user.tenantId : undefined;
+    if (!tenantId) {
+      throw new ForbiddenException(
+        'This endpoint requires a tenant-scoped JWT.',
+      );
+    }
+    return this.featuresService.getEffectiveFeatures(tenantId);
+  }
+
+  // ── Platform-admin-only routes ──────────────────────────────────────
+
   @Get('features')
+  @UseGuards(JwtAuthGuard, PlatformAdminGuard)
   @ApiOperation({
     summary: 'List all features',
     description:
-      'PLATFORM-ADMIN-ONLY route — NOT tenant-scoped: requires a Bearer ' +
+      'PLATFORM-ADMIN-ONLY route -- NOT tenant-scoped: requires a Bearer ' +
       "token from POST /admin/auth/login whose payload role is " +
       "'platform_admin' (JwtAuthGuard + PlatformAdminGuard). No X-Tenant-ID " +
       'header is used. Returns the full feature catalog (key, name, ' +
@@ -62,22 +104,23 @@ export class FeaturesController {
   })
   @ApiResponse({
     status: 401,
-    description: 'Unauthorized — valid Bearer token required',
+    description: 'Unauthorized -- valid Bearer token required',
   })
   @ApiResponse({
     status: 403,
     description:
-      "Forbidden — platform admin privileges required (valid JWT with role 'platform_admin')",
+      "Forbidden -- platform admin privileges required (valid JWT with role 'platform_admin')",
   })
   listAllFeatures() {
     return this.featuresService.listAllFeatures();
   }
 
   @Get('tenants/:tenantId/features')
+  @UseGuards(JwtAuthGuard, PlatformAdminGuard)
   @ApiOperation({
     summary: "Get a tenant's effective features",
     description:
-      'PLATFORM-ADMIN-ONLY route — NOT tenant-scoped: requires a Bearer ' +
+      'PLATFORM-ADMIN-ONLY route -- NOT tenant-scoped: requires a Bearer ' +
       "token from POST /admin/auth/login whose payload role is " +
       "'platform_admin' (JwtAuthGuard + PlatformAdminGuard). No X-Tenant-ID " +
       'header is used. Returns the merged map of featureKey -> enabled for a ' +
@@ -92,12 +135,12 @@ export class FeaturesController {
   })
   @ApiResponse({
     status: 401,
-    description: 'Unauthorized — valid Bearer token required',
+    description: 'Unauthorized -- valid Bearer token required',
   })
   @ApiResponse({
     status: 403,
     description:
-      "Forbidden — platform admin privileges required (valid JWT with role 'platform_admin')",
+      "Forbidden -- platform admin privileges required (valid JWT with role 'platform_admin')",
   })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   getEffectiveFeatures(@Param('tenantId') tenantId: string) {
@@ -105,10 +148,11 @@ export class FeaturesController {
   }
 
   @Patch('tenants/:tenantId/features/:featureKey')
+  @UseGuards(JwtAuthGuard, PlatformAdminGuard)
   @ApiOperation({
     summary: 'Set a tenant feature override',
     description:
-      'PLATFORM-ADMIN-ONLY route — NOT tenant-scoped: requires a Bearer ' +
+      'PLATFORM-ADMIN-ONLY route -- NOT tenant-scoped: requires a Bearer ' +
       "token from POST /admin/auth/login whose payload role is " +
       "'platform_admin' (JwtAuthGuard + PlatformAdminGuard). No X-Tenant-ID " +
       'header is used. Creates or updates a tenant_feature_overrides row, ' +
@@ -123,12 +167,12 @@ export class FeaturesController {
   @ApiResponse({ status: 400, description: 'Validation failed' })
   @ApiResponse({
     status: 401,
-    description: 'Unauthorized — valid Bearer token required',
+    description: 'Unauthorized -- valid Bearer token required',
   })
   @ApiResponse({
     status: 403,
     description:
-      "Forbidden — platform admin privileges required (valid JWT with role 'platform_admin')",
+      "Forbidden -- platform admin privileges required (valid JWT with role 'platform_admin')",
   })
   @ApiResponse({
     status: 404,
@@ -147,17 +191,18 @@ export class FeaturesController {
   }
 
   @Patch('plan-tiers/:planTier/features/:featureKey')
+  @UseGuards(JwtAuthGuard, PlatformAdminGuard)
   @ApiOperation({
     summary: 'Set a plan tier feature default',
     description:
-      'PLATFORM-ADMIN-ONLY route — NOT tenant-scoped: requires a Bearer ' +
+      'PLATFORM-ADMIN-ONLY route -- NOT tenant-scoped: requires a Bearer ' +
       "token from POST /admin/auth/login whose payload role is " +
       "'platform_admin' (JwtAuthGuard + PlatformAdminGuard). No X-Tenant-ID " +
       'header is used. Creates or updates a plan_tier_features row, changing ' +
       'the default enabled state of this feature for the given tier. Body: ' +
       '{ enabled: boolean }. WARNING: Changing a tier default takes effect ' +
       'immediately for every tenant on this tier that does not have an ' +
-      'explicit override for this feature — this is not limited to newly ' +
+      'explicit override for this feature -- this is not limited to newly ' +
       'provisioned tenants.',
   })
   @ApiResponse({
@@ -168,16 +213,16 @@ export class FeaturesController {
   @ApiResponse({
     status: 400,
     description:
-      "Validation failed — planTier must be one of 'trial' | 'basic' | 'premium' or body missing enabled",
+      "Validation failed -- planTier must be one of 'trial' | 'basic' | 'premium' or body missing enabled",
   })
   @ApiResponse({
     status: 401,
-    description: 'Unauthorized — valid Bearer token required',
+    description: 'Unauthorized -- valid Bearer token required',
   })
   @ApiResponse({
     status: 403,
     description:
-      "Forbidden — platform admin privileges required (valid JWT with role 'platform_admin')",
+      "Forbidden -- platform admin privileges required (valid JWT with role 'platform_admin')",
   })
   @ApiResponse({
     status: 404,
@@ -197,19 +242,20 @@ export class FeaturesController {
   }
 
   // NOTE: the literal route /plan-tiers/features must be declared BEFORE the
-  // parameterized /plan-tiers/:planTier/features below — Express matches
+  // parameterized /plan-tiers/:planTier/features below -- Express matches
   // routes in registration order, so a literal 'features' segment would
   // otherwise be captured by the :planTier param.
   @Get('plan-tiers/features')
+  @UseGuards(JwtAuthGuard, PlatformAdminGuard)
   @ApiOperation({
     summary: "Get all plan tiers' feature defaults",
     description:
-      'PLATFORM-ADMIN-ONLY route — NOT tenant-scoped: requires a Bearer ' +
+      'PLATFORM-ADMIN-ONLY route -- NOT tenant-scoped: requires a Bearer ' +
       "token from POST /admin/auth/login whose payload role is " +
       "'platform_admin' (JwtAuthGuard + PlatformAdminGuard). No X-Tenant-ID " +
       'header is used. Returns the default feature set for every plan tier ' +
       'in one response, grouped by tier as { trial: { featureKey: ' +
-      'boolean, ... }, basic: { ... }, premium: { ... } } — for rendering a ' +
+      'boolean, ... }, basic: { ... }, premium: { ... } } -- for rendering a ' +
       'Trial/Basic/Premium comparison table in a single view.',
   })
   @ApiResponse({
@@ -220,22 +266,23 @@ export class FeaturesController {
   })
   @ApiResponse({
     status: 401,
-    description: 'Unauthorized — valid Bearer token required',
+    description: 'Unauthorized -- valid Bearer token required',
   })
   @ApiResponse({
     status: 403,
     description:
-      "Forbidden — platform admin privileges required (valid JWT with role 'platform_admin')",
+      "Forbidden -- platform admin privileges required (valid JWT with role 'platform_admin')",
   })
   getAllPlanTierDefaults() {
     return this.featuresService.getAllPlanTierDefaults();
   }
 
   @Get('plan-tiers/:planTier/features')
+  @UseGuards(JwtAuthGuard, PlatformAdminGuard)
   @ApiOperation({
     summary: "Get a plan tier's feature defaults",
     description:
-      'PLATFORM-ADMIN-ONLY route — NOT tenant-scoped: requires a Bearer ' +
+      'PLATFORM-ADMIN-ONLY route -- NOT tenant-scoped: requires a Bearer ' +
       "token from POST /admin/auth/login whose payload role is " +
       "'platform_admin' (JwtAuthGuard + PlatformAdminGuard). No X-Tenant-ID " +
       'header is used. Returns the default feature set (plan_tier_features ' +
@@ -252,16 +299,16 @@ export class FeaturesController {
   @ApiResponse({
     status: 400,
     description:
-      "Validation failed — planTier must be one of 'trial' | 'basic' | 'premium'",
+      "Validation failed -- planTier must be one of 'trial' | 'basic' | 'premium'",
   })
   @ApiResponse({
     status: 401,
-    description: 'Unauthorized — valid Bearer token required',
+    description: 'Unauthorized -- valid Bearer token required',
   })
   @ApiResponse({
     status: 403,
     description:
-      "Forbidden — platform admin privileges required (valid JWT with role 'platform_admin')",
+      "Forbidden -- platform admin privileges required (valid JWT with role 'platform_admin')",
   })
   listPlanTierDefaults(
     @Param('planTier', new ParseEnumPipe(TenantPlanTier))
@@ -271,10 +318,11 @@ export class FeaturesController {
   }
 
   @Delete('tenants/:tenantId/features/:featureKey')
+  @UseGuards(JwtAuthGuard, PlatformAdminGuard)
   @ApiOperation({
     summary: 'Remove a tenant feature override',
     description:
-      'PLATFORM-ADMIN-ONLY route — NOT tenant-scoped: requires a Bearer ' +
+      'PLATFORM-ADMIN-ONLY route -- NOT tenant-scoped: requires a Bearer ' +
       "token from POST /admin/auth/login whose payload role is " +
       "'platform_admin' (JwtAuthGuard + PlatformAdminGuard). No X-Tenant-ID " +
       'header is used. Deletes the tenant_feature_overrides row, reverting ' +
@@ -284,16 +332,16 @@ export class FeaturesController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Override removed — { removed: true } if a row was deleted',
+    description: 'Override removed -- { removed: true } if a row was deleted',
   })
   @ApiResponse({
     status: 401,
-    description: 'Unauthorized — valid Bearer token required',
+    description: 'Unauthorized -- valid Bearer token required',
   })
   @ApiResponse({
     status: 403,
     description:
-      "Forbidden — platform admin privileges required (valid JWT with role 'platform_admin')",
+      "Forbidden -- platform admin privileges required (valid JWT with role 'platform_admin')",
   })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   removeOverride(
