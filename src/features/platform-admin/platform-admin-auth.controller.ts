@@ -1,5 +1,6 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Public } from '../auth/public.decorator';
 import { PlatformAdminLoginDto } from './dto/platform-admin-login.dto';
 import { PlatformAdminAuthService } from './platform-admin-auth.service';
 
@@ -10,6 +11,7 @@ export class PlatformAdminAuthController {
     private readonly platformAdminAuthService: PlatformAdminAuthService,
   ) {}
 
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

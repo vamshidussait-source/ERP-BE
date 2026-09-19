@@ -88,4 +88,41 @@ export class UpdateStaffDto {
   @IsOptional()
   @IsEnum(StaffStatus)
   status?: StaffStatus;
+
+  @ApiProperty({
+    description: 'Department the staff member belongs to (pass null to clear)',
+    example: 'Science',
+    required: false,
+    nullable: true,
+    maxLength: 255,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  departmentName?: string | null;
+
+  @ApiProperty({
+    description:
+      "Employment type (free-form, e.g. 'full_time', 'part_time', 'contract'; pass null to clear)",
+    example: 'full_time',
+    required: false,
+    nullable: true,
+    maxLength: 50,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  employmentType?: string | null;
+
+  @ApiProperty({
+    description: 'Office or staff room location (pass null to clear)',
+    example: 'B-204',
+    required: false,
+    nullable: true,
+    maxLength: 50,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  officeRoom?: string | null;
 }

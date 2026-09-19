@@ -5,6 +5,14 @@ export interface JwtPayload {
   tenantId: string;
   tenantSchema: string;
   role: string;
+
+  /**
+   * True while the user is still on a temporary password (issued login or
+   * admin reset). Lets the frontend force the password-change screen before
+   * normal access. Optional so pre-existing tokens without the claim still
+   * validate.
+   */
+  mustChangePassword?: boolean;
 }
 
 /**

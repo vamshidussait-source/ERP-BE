@@ -64,6 +64,31 @@ export class Staff {
   employeeId: string;
 
   @ApiProperty({
+    description: 'Department the staff member belongs to',
+    example: 'Science',
+    nullable: true,
+  })
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  departmentName: string | null;
+
+  @ApiProperty({
+    description:
+      "Employment type (free-form, e.g. 'full_time', 'part_time', 'contract')",
+    example: 'full_time',
+    nullable: true,
+  })
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  employmentType: string | null;
+
+  @ApiProperty({
+    description: 'Office or staff room location',
+    example: 'B-204',
+    nullable: true,
+  })
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  officeRoom: string | null;
+
+  @ApiProperty({
     description: 'Current staff status',
     enum: StaffStatus,
     example: StaffStatus.Active,

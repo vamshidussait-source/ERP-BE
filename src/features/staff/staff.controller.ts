@@ -107,6 +107,36 @@ export class StaffController {
     return this.staffService.findOne(id);
   }
 
+  @Get(':id/academic-load')
+  @ApiOperation({
+    summary: "Get a staff member's aggregated academic load",
+    description:
+      'Aggregates the staff member\'s real timetable assignments: the ' +
+      'distinct class names they teach, the distinct subjects they teach, ' +
+      'and their total weekly period count. Returns empty arrays and 0 when ' +
+      'the staff member has no timetable entries. Accessible to any ' +
+      'authenticated tenant role.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Aggregated academic load',
+    schema: {
+      example: {
+        assignedClasses: ['Grade 10', 'Grade 11'],
+        subjects: ['Mathematics', 'Physics'],
+        weeklyPeriods: 12,
+      },
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — valid Bearer token required',
+  })
+  @ApiResponse({ status: 404, description: 'Staff member not found' })
+  findAcademicLoad(@Param('id') id: string) {
+    return this.staffService.getAcademicLoad(id);
+  }
+
   @Patch(':id')
   @Roles(UserRole.SchoolAdmin)
   @ApiOperation({

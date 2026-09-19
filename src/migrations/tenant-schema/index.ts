@@ -19,6 +19,11 @@ import { CreateGradeBandsTable1710000000018 } from './1710000000018-CreateGradeB
 import { CreateExamsTable1710000000019 } from './1710000000019-CreateExamsTable';
 import { CreateExamSubjectConfigsTable1710000000020 } from './1710000000020-CreateExamSubjectConfigsTable';
 import { CreateExamMarksTable1710000000021 } from './1710000000021-CreateExamMarksTable';
+import { AddStaffQuickInfoFields1710000000022 } from './1710000000022-AddStaffQuickInfoFields';
+import { AddMustChangePasswordToUsers1710000000023 } from './1710000000023-AddMustChangePasswordToUsers';
+import { CreateAnnouncementsTable1710000000024 } from './1710000000024-CreateAnnouncementsTable';
+import { CreateAnnouncementReadsTable1710000000025 } from './1710000000025-CreateAnnouncementReadsTable';
+import { CreateAnnouncementRecipientsTable1710000000026 } from './1710000000026-CreateAnnouncementRecipientsTable';
 
 /**
  * Add new tenant-schema migrations here, in order, as they're created.
@@ -47,4 +52,9 @@ export const tenantSchemaMigrations = [
   CreateExamsTable1710000000019,
   CreateExamSubjectConfigsTable1710000000020,
   CreateExamMarksTable1710000000021,
+  AddStaffQuickInfoFields1710000000022,
+  AddMustChangePasswordToUsers1710000000023,
+  CreateAnnouncementsTable1710000000024,
+  CreateAnnouncementReadsTable1710000000025,
+  CreateAnnouncementRecipientsTable1710000000026,
 ];

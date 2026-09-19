@@ -9,6 +9,13 @@ import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { Staff, StaffStatus } from './staff.entity';
 
+/** Aggregated academic load for a staff member's detail page. */
+export interface StaffAcademicLoad {
+  assignedClasses: string[];
+  subjects: string[];
+  weeklyPeriods: number;
+}
+
 @Injectable()
 export class StaffService {
   constructor(
@@ -28,8 +35,9 @@ export class StaffService {
 
     try {
       const rows = (await queryRunner.query(
-        `INSERT INTO staff ("firstName", "lastName", email, phone, designation, "employeeId")
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO staff ("firstName", "lastName", email, phone, designation, "employeeId",
+                            "departmentName", "employmentType", "officeRoom")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING *`,
         [
           createStaffDto.firstName,
@@ -38,6 +46,9 @@ export class StaffService {
           createStaffDto.phone ?? null,
           createStaffDto.designation,
           createStaffDto.employeeId,
+          createStaffDto.departmentName ?? null,
+          createStaffDto.employmentType ?? null,
+          createStaffDto.officeRoom ?? null,
         ],
       )) as Staff[];
       return rows[0];
@@ -93,6 +104,9 @@ export class StaffService {
       ['designation', updateStaffDto.designation],
       ['employeeId', updateStaffDto.employeeId],
       ['status', updateStaffDto.status],
+      ['departmentName', updateStaffDto.departmentName],
+      ['employmentType', updateStaffDto.employmentType],
+      ['officeRoom', updateStaffDto.officeRoom],
     ];
 
     const setClauses: string[] = [];
@@ -127,6 +141,58 @@ export class StaffService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Aggregates a staff member's real timetable assignments for their detail
+   * page: the distinct classes they teach (via timetable → sections →
+   * classes), the distinct subjects they teach, and their total weekly
+   * period count. Returns empty arrays / 0 when they have no entries.
+   */
+  async getAcademicLoad(id: string): Promise<StaffAcademicLoad> {
+    const queryRunner = await this.queryRunner();
+
+    // 404 like findOne() when the staff member doesn't exist.
+    const staffRows = (await queryRunner.query(
+      `SELECT id FROM staff WHERE id = $1`,
+      [id],
+    )) as Array<{ id: string }>;
+    if (!staffRows[0]) {
+      throw new NotFoundException(`Staff member with id ${id} not found`);
+    }
+
+    const loadRows = (await queryRunner.query(
+      `SELECT
+         COUNT(*)::int AS "weeklyPeriods",
+         COUNT(DISTINCT t.subject)::int AS "subjectCount"
+       FROM timetable t
+       WHERE t."staffId" = $1`,
+      [id],
+    )) as Array<{ weeklyPeriods: number; subjectCount: number }>;
+
+    const classRows = (await queryRunner.query(
+      `SELECT DISTINCT c.name
+       FROM timetable t
+       JOIN sections s ON s.id = t."sectionId"
+       JOIN classes c ON c.id = s."classId"
+       WHERE t."staffId" = $1
+       ORDER BY c.name ASC`,
+      [id],
+    )) as Array<{ name: string }>;
+
+    const subjectRows = (await queryRunner.query(
+      `SELECT DISTINCT t.subject
+       FROM timetable t
+       WHERE t."staffId" = $1
+       ORDER BY t.subject ASC`,
+      [id],
+    )) as Array<{ subject: string }>;
+
+    return {
+      assignedClasses: classRows.map((row) => row.name),
+      subjects: subjectRows.map((row) => row.subject),
+      weeklyPeriods: loadRows[0]?.weeklyPeriods ?? 0,
+    };
   }
 
   /**

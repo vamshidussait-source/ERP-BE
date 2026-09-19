@@ -66,4 +66,41 @@ export class CreateStaffDto {
   @IsNotEmpty()
   @MaxLength(50)
   employeeId: string;
+
+  @ApiProperty({
+    description: 'Department the staff member belongs to',
+    example: 'Science',
+    required: false,
+    nullable: true,
+    maxLength: 255,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  departmentName?: string;
+
+  @ApiProperty({
+    description:
+      "Employment type (free-form, e.g. 'full_time', 'part_time', 'contract')",
+    example: 'full_time',
+    required: false,
+    nullable: true,
+    maxLength: 50,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  employmentType?: string;
+
+  @ApiProperty({
+    description: 'Office or staff room location',
+    example: 'B-204',
+    required: false,
+    nullable: true,
+    maxLength: 50,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  officeRoom?: string;
 }

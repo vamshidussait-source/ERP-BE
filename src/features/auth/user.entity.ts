@@ -35,6 +35,15 @@ export class User {
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
+  /**
+   * True while the user is still on a temporary password (freshly issued
+   * login or admin reset). Forces the password-change screen on login and
+   * drives the 'password_reset_pending' loginStatus in the account-access
+   * list. Cleared by POST /auth/change-password.
+   */
+  @Column({ type: 'boolean', default: false })
+  mustChangePassword: boolean;
+
   @Column({ type: 'uuid', nullable: true })
   linkedStudentId: string | null;
 

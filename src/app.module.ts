@@ -2,7 +2,7 @@ import './pg-date-parser'; // register pg date OID parser before any connection
 import { Module, ValidationPipe } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { APP_FILTER, APP_PIPE } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import envConfig from './config/env.config';
@@ -20,8 +20,13 @@ import { FeaturesModule } from './features/features/features.module';
 import { ParentStudentLinksModule } from './features/parent-student-links/parent-student-links.module';
 import { TimetableModule } from './features/timetable/timetable.module';
 import { ProgressReportsModule } from './features/progress-reports/progress-reports.module';
+import { AnnouncementsModule } from './features/announcements/announcements.module';
 import { ExamsGradesModule } from './features/exams-grades/exams-grades.module';
+import { AccountAccessModule } from './features/account-access/account-access.module';
+import { DashboardModule } from './features/dashboard/dashboard.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { JwtAuthGuard } from './features/auth/jwt-auth.guard';
+import { MustChangePasswordGuard } from './features/auth/must-change-password.guard';
 import { AppLogger } from './common/logger/app.logger';
 
 @Module({
@@ -60,7 +65,10 @@ import { AppLogger } from './common/logger/app.logger';
     ParentStudentLinksModule,
     TimetableModule,
     ProgressReportsModule,
+    AnnouncementsModule,
     ExamsGradesModule,
+    AccountAccessModule,
+    DashboardModule,
     FilesModule,
     NotificationsModule,
     AuthModule,
@@ -77,6 +85,21 @@ import { AppLogger } from './common/logger/app.logger';
         forbidNonWhitelisted: true,
         transform: true,
       }),
+    },
+    // Global guard chain — order matters:
+    //   1. JwtAuthGuard authenticates the token and populates request.user.
+    //   2. MustChangePasswordGuard reads the mustChangePassword claim from
+    //      request.user and blocks every route except the password-change
+    //      flow for users still on a temporary password.
+    // Global (not per-controller) so every existing and future authenticated
+    // route is covered automatically.
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: MustChangePasswordGuard,
     },
     {
       provide: APP_FILTER,
